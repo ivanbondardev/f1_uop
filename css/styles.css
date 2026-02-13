@@ -241,24 +241,25 @@ code, pre {
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 10px 0 20px;
   scrollbar-width: thin;
 }
 
-.sidebar::-webkit-scrollbar { width: 6px; }
-.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.sidebar::-webkit-scrollbar { width: 5px; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }
+.sidebar::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
 
 .nav-section {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 /* Активна рольова секція — візуальний акцент у верхній частині сайдбару */
 .nav-section--active-role {
-  background: rgba(0, 122, 204, 0.05);
+  background: rgba(0, 122, 204, 0.04);
   border-left: 3px solid var(--accent);
-  border-radius: 0 6px 6px 0;
-  padding: 4px 0;
-  margin-bottom: 2px;
+  border-radius: 0 8px 8px 0;
+  padding: 6px 0 4px;
+  margin: 0 4px 4px 0;
 }
 
 .nav-section--active-role .nav-section-title {
@@ -266,47 +267,67 @@ code, pre {
   font-weight: 700;
 }
 
+/* P0-пріоритетні модулі — візуальний акцент */
+.nav-section--p0 {
+  background: rgba(0, 122, 204, 0.03);
+  border-radius: var(--radius-sm);
+  margin: 2px 6px 6px;
+  padding: 4px 0 2px;
+}
+
+.nav-section--p0 .nav-section-title {
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.8px;
+}
+
+.nav-section--p0 .nav-item {
+  font-weight: 500;
+}
+
 .nav-section-title {
-  padding: 8px 14px 4px;
-  font-size: 11px;
+  padding: 10px 16px 5px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   color: var(--text-muted);
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
+  gap: 10px;
+  padding: 7px 12px 7px 16px;
+  margin: 1px 6px;
   font-size: var(--font-size-base);
   color: var(--text-secondary);
   cursor: pointer;
-  border-radius: 0;
-  transition: background 0.1s, color 0.1s;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
   text-decoration: none;
   border-left: 3px solid transparent;
 }
 
 .nav-item:hover {
-  background: var(--bg-hover);
+  background: rgba(0, 0, 0, 0.05);
   color: var(--text);
   text-decoration: none;
 }
 
 .nav-item.active {
-  background: rgba(0, 122, 204, 0.08);
+  background: rgba(0, 122, 204, 0.1);
   color: var(--accent);
   border-left-color: var(--accent);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .nav-item .nav-icon {
-  width: 18px;
+  width: 20px;
   text-align: center;
-  font-size: 14px;
+  font-size: 15px;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .nav-item .nav-badge {
@@ -314,15 +335,19 @@ code, pre {
   background: var(--danger);
   color: #fff;
   font-size: 10px;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: 10px;
-  font-weight: 600;
+  font-weight: 700;
+  min-width: 20px;
+  text-align: center;
+  line-height: 1.4;
 }
 
 .nav-divider {
   height: 1px;
   background: var(--divider);
-  margin: 6px 14px;
+  margin: 8px 16px;
+  opacity: 0.6;
 }
 
 /* --- Main Content --- */
@@ -4467,6 +4492,19 @@ body.f1-auth-mode .hero-notice {
 }
 
 /* === Print === */
+/* ── SH-04 Task row selection ── */
+.task-row-selected {
+  background: rgba(0, 122, 204, 0.12) !important;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.cl-row:hover .quick-actions-row {
+  opacity: 1;
+}
+.quick-actions-row {
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
 @media print {
   .sidebar, .topbar { display: none; }
   .main-content { padding: 0; }

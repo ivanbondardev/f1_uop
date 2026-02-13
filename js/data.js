@@ -1283,22 +1283,55 @@ const DATA = {
 
   // ─── P0: Єдиний ввід бухгалтерських даних (SH-11) ───
   accountingSingleEntry: {
-    meta: { source: "dummy", version: "poc" },
+    meta: {
+      document_path: "shared/SH-11_accounting_single_entry_console.md",
+      screen_id: "SH-11_accounting_single_entry_console",
+      primary_route: "/api/v1/accounting/work-queue?mode=single-entry",
+      primary_event: "SingleEntryCaptured",
+      updated_at: "2026-02-12T09:00:00Z"
+    },
     data: {
-      counters: { coverage_rate: "82%", override_count: 4, conflict_queue: 3, ready_to_sync: 12, triple_upload_eliminated_rate: "67%" },
+      counters: {
+        coverage_rate: "82%",
+        override_count: 4,
+        conflict_queue: 3,
+        ready_to_sync: 12,
+        triple_upload_eliminated_rate: "67%",
+        total_entries_today: 19,
+        auto_captured: 15
+      },
       items: [
-        { case_no: "F1-2026-00142", document_ref: "INV-2026-0142", field_group: "invoice", entry_mode: "single_entry", source_ref: "OCR-AWB-142", conflict_status: "none", last_updated_by: "Система (AI)", updated_at: "2026-02-11 09:00" },
-        { case_no: "F1-2026-00142", document_ref: "CC-2026-0142", field_group: "cost_certificate", entry_mode: "single_entry", source_ref: "INV-2026-0142", conflict_status: "none", last_updated_by: "Тетяна В.", updated_at: "2026-02-11 10:30" },
-        { case_no: "F1-2026-00141", document_ref: "INV-2026-0141", field_group: "invoice", entry_mode: "manual_override", source_ref: "MANUAL-Тетяна", conflict_status: "open", last_updated_by: "Тетяна В.", updated_at: "2026-02-11 08:45" },
-        { case_no: "F1-2026-00139", document_ref: "INV-2026-0139", field_group: "counterparty", entry_mode: "single_entry", source_ref: "1C-SYNC-139", conflict_status: "resolved", last_updated_by: "Система (1С)", updated_at: "2026-02-10 17:30" },
-        { case_no: "F1-2026-00138", document_ref: "CC-2026-0138", field_group: "cost_certificate", entry_mode: "single_entry", source_ref: "OCR-CMR-138", conflict_status: "open", last_updated_by: "Система (AI)", updated_at: "2026-02-10 16:50" },
-        { case_no: "F1-2026-00137", document_ref: "INV-2026-0137", field_group: "invoice", entry_mode: "single_entry", source_ref: "OCR-INV-137", conflict_status: "none", last_updated_by: "Система (AI)", updated_at: "2026-02-10 15:20" },
-        { case_no: "F1-2026-00136", document_ref: "INV-2026-0136", field_group: "invoice", entry_mode: "manual_override", source_ref: "MANUAL-Лариса", conflict_status: "overridden", last_updated_by: "Лариса П.", updated_at: "2026-02-10 14:00" }
+        { case_no: "F1-2026-00142", document_ref: "INV-2026-0142", field_group: "invoice", entry_mode: "single_entry", source_ref: "OCR-AWB-142", conflict_status: "none", last_updated_by: "Система (AI)", updated_at: "2026-02-11 09:00", sync_status: "ready" },
+        { case_no: "F1-2026-00142", document_ref: "CC-2026-0142", field_group: "cost_certificate", entry_mode: "single_entry", source_ref: "INV-2026-0142", conflict_status: "none", last_updated_by: "Тетяна В.", updated_at: "2026-02-11 10:30", sync_status: "ready" },
+        { case_no: "F1-2026-00141", document_ref: "INV-2026-0141", field_group: "invoice", entry_mode: "manual_override", source_ref: "MANUAL-Тетяна", conflict_status: "open", last_updated_by: "Тетяна В.", updated_at: "2026-02-11 08:45", sync_status: "blocked" },
+        { case_no: "F1-2026-00139", document_ref: "INV-2026-0139", field_group: "counterparty", entry_mode: "single_entry", source_ref: "1C-SYNC-139", conflict_status: "resolved", last_updated_by: "Система (1С)", updated_at: "2026-02-10 17:30", sync_status: "synced" },
+        { case_no: "F1-2026-00138", document_ref: "CC-2026-0138", field_group: "cost_certificate", entry_mode: "single_entry", source_ref: "OCR-CMR-138", conflict_status: "open", last_updated_by: "Система (AI)", updated_at: "2026-02-10 16:50", sync_status: "blocked" },
+        { case_no: "F1-2026-00137", document_ref: "INV-2026-0137", field_group: "invoice", entry_mode: "single_entry", source_ref: "OCR-INV-137", conflict_status: "none", last_updated_by: "Система (AI)", updated_at: "2026-02-10 15:20", sync_status: "ready" },
+        { case_no: "F1-2026-00136", document_ref: "INV-2026-0136", field_group: "invoice", entry_mode: "manual_override", source_ref: "MANUAL-Лариса", conflict_status: "overridden", last_updated_by: "Лариса П.", updated_at: "2026-02-10 14:00", sync_status: "synced" },
+        { case_no: "F1-2026-00135", document_ref: "CC-2026-0135", field_group: "cost_certificate", entry_mode: "single_entry", source_ref: "OCR-CMR-135", conflict_status: "none", last_updated_by: "Система (AI)", updated_at: "2026-02-10 11:40", sync_status: "ready" },
+        { case_no: "F1-2026-00134", document_ref: "INV-2026-0134", field_group: "invoice", entry_mode: "single_entry", source_ref: "OCR-INV-134", conflict_status: "none", last_updated_by: "Система (AI)", updated_at: "2026-02-10 10:15", sync_status: "synced" },
+        { case_no: "F1-2026-00133", document_ref: "INV-2026-0133", field_group: "counterparty", entry_mode: "manual_override", source_ref: "MANUAL-Тетяна", conflict_status: "overridden", last_updated_by: "Тетяна В.", updated_at: "2026-02-09 17:00", sync_status: "synced" }
       ],
       conflicts: [
-        { case_no: "F1-2026-00141", field_group: "invoice", field: "Сума (EUR)", existing_value: "€8,200", new_value: "€8,450", source_ref: "OCR-CMR-141" },
-        { case_no: "F1-2026-00138", field_group: "cost_certificate", field: "Курс USD/UAH", existing_value: "41.20", new_value: "41.35", source_ref: "НБУ-2026-02-10" },
-        { case_no: "F1-2026-00141", field_group: "counterparty", field: "ЄДРПОУ", existing_value: "12345678", new_value: "12345679", source_ref: "1C-SYNC-141" }
+        { case_no: "F1-2026-00141", field_group: "invoice", field: "Сума (EUR)", existing_value: "€8,200", new_value: "€8,450", source_ref: "OCR-CMR-141", detected_at: "2026-02-11 08:40", impact: "Різниця €250 — вплив на рахунок клієнту та довідку витрат. Потребує звірки з оригіналом інвойсу." },
+        { case_no: "F1-2026-00138", field_group: "cost_certificate", field: "Курс USD/UAH", existing_value: "41.20", new_value: "41.35", source_ref: "НБУ-2026-02-10", detected_at: "2026-02-10 16:45", impact: "Курс НБУ оновився. Різниця 0.15 грн/USD — вплив на розрахунок витрат у гривні." },
+        { case_no: "F1-2026-00141", field_group: "counterparty", field: "ЄДРПОУ", existing_value: "12345678", new_value: "12345679", source_ref: "1C-SYNC-141", detected_at: "2026-02-11 08:42", impact: "Розбіжність ЄДРПОУ з 1С. Можлива помилка OCR при розпізнаванні документа. Критично для податкових документів." }
+      ],
+      audit_trail: [
+        { timestamp: "2026-02-11 10:30", actor: "Тетяна В.", action: "capture", detail: "Зафіксовано довідку витрат CC-2026-0142 з даних інвойсу INV-2026-0142", case_no: "F1-2026-00142", reason_code: null },
+        { timestamp: "2026-02-11 09:15", actor: "Система (AI)", action: "auto_capture", detail: "Автозахоплення реквізитів інвойсу з OCR-AWB-142 (довірчість: 97%)", case_no: "F1-2026-00142", reason_code: null },
+        { timestamp: "2026-02-11 08:45", actor: "Тетяна В.", action: "override", detail: "Ручне перевизначення суми інвойсу: €8,200 → €8,450. Причина: «Сума в оригіналі відрізняється від OCR»", case_no: "F1-2026-00141", reason_code: "ocr_mismatch" },
+        { timestamp: "2026-02-10 17:30", actor: "Система (1С)", action: "sync_complete", detail: "Синхронізацію з 1С завершено для контрагента INV-2026-0139. Статус: ОК.", case_no: "F1-2026-00139", reason_code: null },
+        { timestamp: "2026-02-10 16:50", actor: "Система (AI)", action: "conflict_detected", detail: "Курс USD/UAH у довідці (41.20) не збігається з курсом НБУ (41.35). Створено конфлікт.", case_no: "F1-2026-00138", reason_code: "rate_mismatch" },
+        { timestamp: "2026-02-10 15:20", actor: "Система (AI)", action: "auto_capture", detail: "Автозахоплення інвойсу OCR-INV-137 (довірчість: 99%)", case_no: "F1-2026-00137", reason_code: null },
+        { timestamp: "2026-02-10 14:00", actor: "Лариса П.", action: "override", detail: "Ручне перевизначення поля «Номер інвойсу». Причина: «Коректний номер з email клієнта»", case_no: "F1-2026-00136", reason_code: "client_correction" },
+        { timestamp: "2026-02-10 13:45", actor: "Система", action: "sync_batch", detail: "Пакетна синхронізація 8 записів з 1С. Успішно: 8, помилок: 0.", case_no: null, reason_code: null }
+      ],
+      ready_to_sync_items: [
+        { case_no: "F1-2026-00142", document_ref: "INV-2026-0142", field_group: "invoice", fields_count: 6, all_fields_valid: true, last_check: "2026-02-11 11:00" },
+        { case_no: "F1-2026-00142", document_ref: "CC-2026-0142", field_group: "cost_certificate", fields_count: 8, all_fields_valid: true, last_check: "2026-02-11 11:00" },
+        { case_no: "F1-2026-00137", document_ref: "INV-2026-0137", field_group: "invoice", fields_count: 6, all_fields_valid: true, last_check: "2026-02-10 16:00" },
+        { case_no: "F1-2026-00135", document_ref: "CC-2026-0135", field_group: "cost_certificate", fields_count: 8, all_fields_valid: true, last_check: "2026-02-10 12:00" }
       ]
     },
     errors: []

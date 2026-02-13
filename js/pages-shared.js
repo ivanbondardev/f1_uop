@@ -490,377 +490,151 @@ registerPages({
       C.tabContent('gate', `<p class="text-secondary">Фінансовий шлюз: ${C.link('#/roles/finance/gate', 'Переглянути контроль шлюзу видачі →')}</p>`);
   },
 
-  // ─── SH-04 Завдання та SLA ───
+  // ─── SH-04 Завдання та SLA (інтерактивний) ───
   '#/shared/tasks': function() {
+    // Ініціалізація стану (зберігається між переходами)
+    if (!window._taskState) {
+      window._taskState = {
+        search: '', view: 'all', filters: {}, sortCol: 'sla_state', sortDir: 'desc',
+        page: 1, perPage: 10, selectedTaskId: null, armMode: true
+      };
+    }
+    var st = window._taskState;
     const d = DATA.tasks.data;
     const td = d.task_detail;
     const bq = d.breach_queue;
     const kpi = d.kpi;
 
-    // Унікальні значення для фільтрів
-    const taskTypes = [...new Set(d.items.map(t => t.task_type))];
-    const ownerRoles = [...new Set(d.items.map(t => t.owner_role))];
-    const statuses = [...new Set(d.items.map(t => t.status))];
+    var html = C.pageHeader('Завдання та SLA', 'SH-04 \u2014 Управління задачами з прозорим SLA') +
 
-    // Хелпер: бейдж ескалації
-    function escalationBadge(s) {
-      if (!s || s === 'not_escalated') return '<span class="badge-status">—</span>';
-      const cls = s === 'L2' ? 'danger' : (s === 'L1' ? 'warning' : '');
-      return '<span class="badge-severity ' + (s === 'L2' ? 'high' : (s === 'L1' ? 'medium' : 'low')) + '">' + s + '</span>';
-    }
-
-    // Хелпер: SLA таймер (демо — обчислення відносно поточного часу)
-    function slaTimer(dueAt, status) {
-      if (status === 'done' || status === 'cancelled') return '<span class="text-muted text-sm">—</span>';
-      var due = new Date(dueAt.replace(' ', 'T') + ':00');
-      var now = new Date('2026-02-11T12:00:00');
-      var diff = due - now;
-      if (diff <= 0) return '<span class="text-danger font-bold text-sm">Прострочено</span>';
-      var hours = Math.floor(diff / 3600000);
-      var mins = Math.floor((diff % 3600000) / 60000);
-      if (hours < 4) return '<span class="text-warning font-bold text-sm">' + hours + ' год ' + mins + ' хв</span>';
-      return '<span class="text-sm">' + hours + ' год ' + mins + ' хв</span>';
-    }
-
-    return C.pageHeader('Завдання та SLA', 'SH-04 — Управління задачами з прозорим SLA') +
-
-      // ── Page-level hero-notice ──
+      // -- Page-level hero-notice --
       C.heroNotice('Модуль задач і SLA',
         '<strong>Для всіх ролей.</strong> Формалізовані задачі з прозорими дедлайнами, SLA-станами та автоматичними ескалаціями. Кожна задача має lifecycle, SLA-таймер і прив\'язку до кейсу.<br><br>' +
         '<strong>Раніше (AS-IS):</strong> завдання передавались усно, email або в месенджерах. Дедлайни не контролювались системою. Ескалації відбувались ad-hoc, коли хтось помічав проблему. Не було способу побачити всі задачі команди з їх пріоритетами.<br>' +
-        '<strong>Тепер у F1 (TO-BE):</strong> кожна задача рухається по lifecycle (open → in_progress → done) з видимим SLA-таймером. Breached-задачі автоматично ескалюються (L1 → L2 → L3). Перепризначення, скасування, ескалація — завжди з reason_code і audit trail. Режим АРМ фокусує на «next best action» для поточної зміни.') +
+        '<strong>Тепер у F1 (TO-BE):</strong> кожна задача рухається по lifecycle (open \u2192 in_progress \u2192 done) з видимим SLA-таймером. Breached-задачі автоматично ескалюються (L1 \u2192 L2 \u2192 L3). Перепризначення, скасування, ескалація \u2014 завжди з reason_code і audit trail. Режим АРМ фокусує на \u00abnext best action\u00bb для поточної зміни.') +
 
-      // ── Stat Cards ──
-      C.statCards([
-        { value: d.counters.active_tasks, label: 'Активні завдання', color: 'accent' },
-        { value: d.counters.at_risk_tasks, label: 'Під ризиком', color: 'warning' },
-        { value: d.counters.breached_tasks, label: 'Порушено SLA', color: 'danger' },
-        { value: d.counters.done_today, label: 'Завершено сьогодні', color: 'success' },
-      ]) +
+      C.notice('Інтерактивний демо-режим',
+        'Пошук, фільтри, сортування та saved views \u2014 повністю функціональні. Натисніть на рядок задачі для переходу до деталей. Дії із задачами (розпочати, завершити, перепризначити, ескалювати) доступні через кнопки у рядку та модальні вікна. Режим АРМ фільтрує чергу за \u00abnext best action\u00bb.') +
 
-      // ── Tabs: Role Inbox / Task Details / Breach Queue ──
+      // -- Stat Cards (dynamic) --
+      '<div id="task-stats"></div>' +
+
+      // -- Tabs --
       C.tabs([
         { id: 'role-inbox', label: 'Черга задач' },
         { id: 'task-detail', label: 'Деталі задачі' },
         { id: 'breach-queue', label: 'Черга порушень' },
+        { id: 'kpi', label: 'KPI модуля' },
       ], 0) +
 
-      // ═══════════════════════════════════════
-      // TAB 1: Role Inbox
-      // ═══════════════════════════════════════
+      // TAB 1: Role Inbox (interactive containers)
       C.tabContent('role-inbox',
-
-        // ARM Mode indicator (docs/20)
-        '<div class="card mb-12" style="border-left:3px solid var(--accent);">' +
-          '<div class="flex justify-between items-center">' +
-            '<div><span class="text-sm font-bold">Режим АРМ</span> <span class="text-sm text-muted">· Фокус на «next best action» для поточної зміни</span></div>' +
-            '<div>' + C.statusBadge('active') + '</div>' +
-          '</div>' +
+        '<div id="task-arm"></div>' +
+        '<div class="search-bar" id="task-search-wrap">' +
+          '<span class="search-bar-icon">\ud83d\udd0d</span>' +
+          '<input class="search-bar-input" id="task-search" type="text" placeholder="Пошук: ID задачі, кейс, назва, відповідальний\u2026" autocomplete="off" value="' + (st.search || '') + '">' +
+          '<span class="search-bar-hint text-muted text-sm">task_id \u00b7 case_no \u00b7 назва \u00b7 роль \u00b7 user</span>' +
         '</div>' +
-
-        // Saved Views
-        C.savedViews([
-          { id: 'all', label: 'Усі завдання', icon: '📋', count: d.counters.active_tasks },
-          { id: 'overdue', label: 'Прострочені', icon: '🔴', count: d.counters.breached_tasks },
-          { id: 'at_risk', label: 'Під ризиком', icon: '⚠', count: d.counters.at_risk_tasks },
-          { id: 'my_role', label: 'Моя роль', icon: '👤', count: 3 },
-          { id: 'arm_next_action', label: 'АРМ: Next Action', icon: '🎯', count: 4 },
-        ], 'all') +
-
-        // Filter Dropdowns
-        C.filterDropdowns([
-          { label: 'Тип задачі', options: [{ label: 'Усі типи', selected: true }, ...taskTypes.map(t => ({ label: C.typeLabel(t) }))] },
-          { label: 'Роль-власник', options: [{ label: 'Усі ролі', selected: true }, ...ownerRoles.map(r => ({ label: r }))] },
-          { label: 'Статус', options: [{ label: 'Усі статуси', selected: true }, ...statuses.map(s => ({ label: C.statusBadge(s).replace(/<[^>]+>/g, '') }))] },
-          { label: 'SLA', options: [{ label: 'Усі', selected: true }, { label: 'В нормі' }, { label: 'Під ризиком' }, { label: 'Порушено' }] },
-        ]) +
-
-        // Sort info
-        '<div class="flex justify-between items-center mb-8">' +
-          '<div class="text-sm text-muted">' +
-            'Сортування: ' + C.sortIndicator('SLA стан') + ' → ' + C.sortIndicator('Пріоритет') + ' → ' + C.sortIndicator('Дедлайн') +
-          '</div>' +
-        '</div>' +
-
-        // Main Table
-        C.table(
-          ['ID', 'Кейс', 'Тип', 'Назва', 'Відповідальний', 'SLA таймер', 'Термін', 'Статус', 'SLA', 'Пріоритет', 'Джерело', 'Ескалація', 'Дії'],
-          d.items.map(function(t) { return [
-            '<span class="font-mono text-sm">' + t.id + '</span>',
-            C.caseLink(t.case_no),
-            C.typeLabel(t.task_type),
-            t.title + (t.blocked_by.length > 0 ? ' <span class="badge-severity medium" title="Блокери: ' + t.blocked_by.join(', ') + '">🔒 ' + t.blocked_by.length + '</span>' : ''),
-            t.owner_role + ' — ' + t.owner_user,
-            slaTimer(t.due_at, t.status),
-            t.due_at,
-            C.statusBadge(t.status),
-            C.slaBadge(t.sla_state),
-            C.priorityBadge(t.priority),
-            C.sourceSystemBadge(t.source_system) + (t.external_task_id ? ' <span class="font-mono text-sm">' + t.external_task_id + '</span>' : ''),
-            escalationBadge(t.escalation_status),
-            '<div class="quick-actions-row">' +
-              '<button class="btn btn-ghost btn-sm" onclick="openModal(\'task-start\')" title="Розпочати">▶</button>' +
-              '<button class="btn btn-ghost btn-sm" onclick="openModal(\'task-complete\')" title="Завершити">✓</button>' +
-              '<button class="btn btn-ghost btn-sm" onclick="openModal(\'task-reassign\')" title="Перепризначити">👤</button>' +
-              '<button class="btn btn-ghost btn-sm" onclick="openModal(\'task-escalate\')" title="Ескалювати">⬆</button>' +
-              (t.external_task_id ? '<button class="btn btn-ghost btn-sm" title="Sync зовнішнього стану (Plane)">🔄</button>' : '') +
-            '</div>'
-          ]; })
-        ) +
-
-        // Action Bar
-        C.actionBar('Дії із завданнями', [
-          { label: 'Призначити', cls: 'btn-secondary', onclick: "openModal('task-assign')" },
-          { label: 'Перепризначити', cls: 'btn-secondary', onclick: "openModal('task-reassign')" },
-          { label: 'Розпочати', cls: 'btn-primary', onclick: "openModal('task-start')" },
-          { label: 'Завершити', cls: 'btn-primary', onclick: "openModal('task-complete')" },
-          { label: 'Скасувати', cls: 'btn-ghost', onclick: "openModal('task-cancel')" },
-          { label: 'Ескалювати', cls: 'btn-danger', onclick: "openModal('task-escalate')" },
-        ]) +
-
-        // Section: Lifecycle notice (critical)
+        '<div id="task-views"></div>' +
+        '<div id="task-filters"></div>' +
+        '<div id="task-sort-info"></div>' +
+        '<div id="task-table"></div>' +
+        '<div id="task-pagination"></div>' +
         C.sectionHeroNotice('Lifecycle задачі та обмеження переходів',
-          'Задача рухається: open → in_progress → done. Скасування (cancelled) можливе тільки з reason. Повторне відкриття (reopen) зі стану done — explicit action з аудитом. Неможливо скасувати breached задачу без аудиту причини.') +
+          'Задача рухається: open \u2192 in_progress \u2192 done. Скасування (cancelled) можливе тільки з reason. Повторне відкриття (reopen) зі стану done \u2014 explicit action з аудитом. Неможливо скасувати breached задачу без аудиту причини.') +
         C.sectionNotice('Правила переходів',
-          'open → in_progress: звичайний перехід. in_progress → done: завершення (блокується якщо є відкриті blockers). open|in_progress → cancelled: тільки з reason_code (TASK_CANCEL_REASON_REQUIRED). done → reopen: audit required (TASK_ALREADY_COMPLETED).'),
-
+          'open \u2192 in_progress: звичайний перехід. in_progress \u2192 done: завершення (блокується якщо є відкриті blockers). open|in_progress \u2192 cancelled: тільки з reason_code (причина скасування обов\u02bcязкова). done \u2192 reopen: audit required (задачу вже завершено).'),
         true // active tab
       ) +
 
-      // ═══════════════════════════════════════
-      // TAB 2: Task Details
-      // ═══════════════════════════════════════
+      // TAB 2: Task Details (dynamic content)
       C.tabContent('task-detail',
-
-        C.sectionHeroNotice('Деталі задачі: ' + td.id,
-          'Повний контекст задачі з prerequisite-чеклістом, блокерами та action log. Кожна критична дія (зміна відповідального, статусу, пріоритету) фіксується з actor/time/reason.') +
-        C.sectionNotice('Зв\'язки',
-          'Задача прив\'язана до кейсу ' + td.case_no + '. Перехід до повної картки кейсу: SH-03. Ескалація переходить до SH-06.') +
-
-        // Task header info
-        '<div class="card mb-16">' +
-          '<div class="card-header"><span class="card-title">' + td.title + '</span>' + C.slaBadge(td.sla_state) + ' ' + C.priorityBadge(td.priority) + ' ' + escalationBadge(td.escalation_status) + '</div>' +
-          '<div class="card-grid">' +
-            '<div>' +
-              '<div class="doc-meta-row"><span class="doc-meta-label">ID задачі</span><span class="doc-meta-value font-mono">' + td.id + '</span></div>' +
-              '<div class="doc-meta-row"><span class="doc-meta-label">Кейс</span><span class="doc-meta-value">' + C.caseLink(td.case_no) + '</span></div>' +
-              '<div class="doc-meta-row"><span class="doc-meta-label">Тип</span><span class="doc-meta-value">' + C.typeLabel(td.task_type) + '</span></div>' +
-              '<div class="doc-meta-row"><span class="doc-meta-label">Статус</span><span class="doc-meta-value">' + C.statusBadge(td.status) + '</span></div>' +
-              '<div class="doc-meta-row"><span class="doc-meta-label">Дедлайн</span><span class="doc-meta-value">' + td.due_at + '</span></div>' +
-              '<div class="doc-meta-row"><span class="doc-meta-label">SLA таймер</span><span class="doc-meta-value">' + slaTimer(td.due_at, td.status) + '</span></div>' +
-            '</div>' +
-            '<div>' +
-              '<div class="doc-meta-row"><span class="doc-meta-label">Відповідальна роль</span><span class="doc-meta-value">' + td.owner_role + '</span></div>' +
-              '<div class="doc-meta-row"><span class="doc-meta-label">Відповідальний</span><span class="doc-meta-value">' + td.owner_user + '</span></div>' +
-              '<div class="doc-meta-row"><span class="doc-meta-label">Блокери</span><span class="doc-meta-value">' + (td.blocked_by.length > 0 ? td.blocked_by.map(function(b) { return '<span class="badge-severity medium">' + b + '</span>'; }).join(' ') : '<span class="text-muted">Немає</span>') + '</span></div>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-
-        // Case context
-        C.section('Контекст кейсу') +
-        '<div class="card mb-16">' +
-          '<div class="doc-meta-row"><span class="doc-meta-label">Клієнт</span><span class="doc-meta-value">' + td.case_context.client + '</span></div>' +
-          '<div class="doc-meta-row"><span class="doc-meta-label">Етап</span><span class="doc-meta-value">' + td.case_context.stage + '</span></div>' +
-          '<div class="doc-meta-row"><span class="doc-meta-label">Очікувана сума</span><span class="doc-meta-value">' + td.case_context.expected_amount + '</span></div>' +
-          '<div class="doc-meta-row"><span class="doc-meta-label">Отримано</span><span class="doc-meta-value">' + td.case_context.received_amount + '</span></div>' +
-          '<div class="doc-meta-row"><span class="doc-meta-label">Недоплата</span><span class="doc-meta-value text-danger font-bold">' + td.case_context.shortfall + '</span></div>' +
-          '<div class="mt-8">' + C.link('#/shared/timeline', 'Відкрити повну картку кейсу →') + '</div>' +
-        '</div>' +
-
-        // Prerequisites checklist
-        C.section('Prerequisite-чекліст') +
-        C.checklist(td.prerequisites) +
-
-        // Action Log
-        C.section('Журнал дій') +
-        '<div class="table-wrap"><table>' +
-          '<thead><tr><th>Час</th><th>Актор</th><th>Дія</th><th>Причина</th><th>Код</th></tr></thead>' +
-          '<tbody>' + td.action_log.map(function(a) {
-            return '<tr>' +
-              '<td class="text-sm text-muted">' + a.ts + '</td>' +
-              '<td>' + a.actor + '</td>' +
-              '<td>' + a.action + '</td>' +
-              '<td class="text-sm">' + a.reason + '</td>' +
-              '<td><span class="text-sm" title="' + a.reason_code + '">' + C.reasonCodeLabel(a.reason_code) + '</span></td>' +
-            '</tr>';
-          }).join('') +
-          '</tbody>' +
-        '</table></div>' +
-
-        // Action bar for task details
-        C.actionBar('Дії із задачею ' + td.id, [
-          { label: 'Розпочати', cls: 'btn-primary', onclick: "openModal('task-start')" },
-          { label: 'Перепризначити', cls: 'btn-secondary', onclick: "openModal('task-reassign')" },
-          { label: 'Ескалювати', cls: 'btn-danger', onclick: "openModal('task-escalate')" },
-          { label: 'Скасувати', cls: 'btn-ghost', onclick: "openModal('task-cancel')" },
-        ])
+        '<div id="task-detail-content"></div>'
       ) +
 
-      // ═══════════════════════════════════════
-      // TAB 3: Breach Queue
-      // ═══════════════════════════════════════
+      // TAB 3: Breach Queue (dynamic)
       C.tabContent('breach-queue',
+        '<div id="task-breach-queue"></div>'
+      ) +
 
-        C.sectionHeroNotice('Черга порушень SLA',
-          'Усі задачі зі sla_state=breached. Кожна має статус ескалації, відповідального за next action і resolution_eta. Критична секція — кожне порушення потребує негайної реакції для уникнення фінансових/митних втрат.') +
-        C.sectionNotice('Ескалаційна модель',
-          'L1 — ескалація на керівника підрозділу. L2 — ескалація на керівника операцій. L3 — ескалація на директора. Кожна ескалація має reason_code, escalated_at і resolution_eta.') +
-
-        // Breach queue table
-        C.table(
-          ['ID', 'Кейс', 'Назва', 'Відповідальний', 'Дедлайн', 'Рівень ескалації', 'Ескалація на', 'Причина ескалації', 'Ескальовано', 'ETA вирішення'],
-          bq.map(function(t) { return [
-            '<span class="font-mono text-sm">' + t.id + '</span>',
-            C.caseLink(t.case_no),
-            t.title,
-            t.owner_role + ' — ' + t.owner_user,
-            '<span class="text-danger">' + t.due_at + '</span>',
-            '<span class="badge-severity ' + (t.escalation_level === 'L2' ? 'high' : 'medium') + '">' + t.escalation_level + '</span>',
-            t.escalated_to_role,
-            '<span class="text-sm">' + t.escalation_reason + '</span>',
-            t.escalated_at,
-            t.resolution_eta
-          ]; })
+      // TAB 4: KPI
+      C.tabContent('kpi',
+        C.sectionHeroNotice('KPI модуля задач',
+          'Агреговані метрики продуктивності модуля задач: медіанний час завершення, частка reopens, час реакції на порушення SLA, розподіл порушень за ролями.') +
+        C.statStrip([
+          { value: kpi.median_task_completion_time_hours + ' год', label: 'Медіанний час завершення', color: 'accent' },
+          { value: kpi.reopen_rate, label: 'Частка reopens', color: '' },
+          { value: kpi.mean_time_to_acknowledge_breach_minutes + ' хв', label: 'Час реакції на breach', color: 'warning' },
+          { value: kpi.time_to_first_action_minutes + ' хв', label: 'Час до першої дії', color: 'accent' },
+        ]) +
+        C.section('Порушення SLA за ролями') +
+        C.horizontalBarChart(
+          kpi.breach_rate_per_role.map(function(r) { return { label: r.role, value: parseFloat(r.rate) }; }),
+          { max: 15, colorFn: function(v) { return v > 5 ? 'danger' : (v > 2 ? 'warning' : 'accent'); } }
         ) +
-
-        C.actionBar('Дії з порушеннями', [
-          { label: 'Ескалювати далі', cls: 'btn-danger', onclick: "openModal('task-escalate')" },
-          { label: 'Перепризначити', cls: 'btn-secondary', onclick: "openModal('task-reassign')" },
-          { label: 'Відкрити виняток', cls: 'btn-secondary', onclick: "navigate('#/shared/exceptions')" },
+        C.section('Останні аудит-записи') +
+        C.timeline([
+          { ts: '2026-02-11 09:00', actor: 'Фінанси \u2014 Лариса П.', message: 'Ескалація L1: SLA порушено, очікується доплата', detail: C.reasonCodeLabel('SLA_BREACHED') },
+          { ts: '2026-02-10 17:30', actor: 'Система', message: 'SLA стан \u2192 breached (T-1199)', detail: C.reasonCodeLabel('SLA_BREACH_AUTO') },
+          { ts: '2026-02-11 12:00', actor: 'Брокер \u2014 Дмитро С.', message: 'Перепризначення: T-1193 \u2192 Керівник операцій', detail: C.reasonCodeLabel('TASK_REASSIGNED') },
+          { ts: '2026-02-10 16:00', actor: 'Фінанси \u2014 Лариса П.', message: 'Створено задачу T-1199 з платіжного винятку', detail: C.reasonCodeLabel('TASK_CREATED') },
+          { ts: '2026-02-10 15:30', actor: 'Система', message: 'Автопризначення T-1199 \u2192 Фінанси', detail: C.reasonCodeLabel('TASK_ASSIGNED') },
         ])
       ) +
 
-      // ═══════════════════════════════════════
-      // KPI Section
-      // ═══════════════════════════════════════
-      C.section('KPI модуля задач') +
-      C.statCards([
-        { value: kpi.median_task_completion_time_hours + ' год', label: 'Медіанний час завершення', color: 'accent' },
-        { value: kpi.reopen_rate, label: 'Частка reopens', color: '' },
-        { value: kpi.mean_time_to_acknowledge_breach_minutes + ' хв', label: 'Час реакції на breach', color: 'warning' },
-        { value: kpi.time_to_first_action_minutes + ' хв', label: 'Час до першої дії', color: 'accent' },
-      ]) +
-
-      C.section('Порушення SLA за ролями') +
-      C.table(
-        ['Роль', 'Частка порушень'],
-        kpi.breach_rate_per_role.map(function(r) { return [
-          r.role,
-          '<strong class="' + (parseFloat(r.rate) > 5 ? 'text-danger' : '') + '">' + r.rate + '</strong>'
-        ]; })
-      ) +
-
-      // ═══════════════════════════════════════
-      // Audit trail demo
-      // ═══════════════════════════════════════
-      C.section('Останні аудит-записи (демо)') +
-      C.auditMeta('Фінанси — Лариса П.', 'Ескалація L1: SLA порушено, очікується доплата', '2026-02-11 09:00', 'SLA_BREACHED') +
-      '<div class="mt-8">' +
-      C.auditMeta('Система', 'SLA стан → breached (T-1199)', '2026-02-10 17:30', 'SLA_BREACH_AUTO') +
-      '</div><div class="mt-8">' +
-      C.auditMeta('Брокер — Дмитро С.', 'Перепризначення: T-1193 → Керівник операцій', '2026-02-11 12:00', 'TASK_REASSIGNED') +
-      '</div>' +
-
-      // ═══════════════════════════════════════
-      // UI States Demo
-      // ═══════════════════════════════════════
-      C.section('Стани UI (демо)') +
-      '<div class="ui-states-grid">' +
-        '<div class="ui-state-demo">' +
-          '<div class="ui-state-demo-label">Завантаження — Skeleton</div>' +
-          C.skeleton(3, 7) +
-        '</div>' +
-        '<div class="ui-state-demo">' +
-          '<div class="ui-state-demo-label">Порожньо — Немає результатів</div>' +
-          C.emptyState('Завдань не знайдено', 'За поточним фільтром або рольовою чергою завдань немає.') +
-          '<div class="mt-8 text-center"><button class="btn btn-secondary">Очистити фільтри</button></div>' +
-        '</div>' +
-        '<div class="ui-state-demo">' +
-          '<div class="ui-state-demo-label">Помилка — Помилка завантаження</div>' +
-          C.errorState('Помилка завантаження завдань', 'Не вдалося завантажити чергу задач або SLA-метадані. Перевірте з\'єднання.') +
-        '</div>' +
-        '<div class="ui-state-demo">' +
-          '<div class="ui-state-demo-label">Заборонено — Доступ заборонено</div>' +
-          C.forbiddenState('Операційний адміністратор') +
-        '</div>' +
-      '</div>' +
-
-      // ═══════════════════════════════════════
-      // Крайні випадки
-      // ═══════════════════════════════════════
-      C.section('Крайні випадки (демо)') +
-      C.sectionHeroNotice('Граничні сценарії SH-04',
-        'Демонстрація поведінки модуля при нестандартних ситуаціях: зміна SLA під час перегляду, паралельне перепризначення, завершення з відкритим блокером, role switch, втрата зв\'язку.') +
-      C.sectionNotice('Припущення',
-        'У PoC-фазі edge cases демонструються статично. Реальна реактивність і live-оновлення рядків реалізуються на наступному етапі.') +
-      '<div class="card-grid">' +
-        '<div class="card">' +
-          '<div class="card-title">Задача стала breached під час перегляду</div>' +
-          '<p class="text-sm text-secondary">Рядок T-1200 оновлюється inline: SLA badge змінюється з «Під ризиком» на «Порушено», з\'являється prompt для ескалації.</p>' +
-        '</div>' +
-        '<div class="card">' +
-          '<div class="card-title">Паралельне перепризначення</div>' +
-          '<p class="text-sm text-secondary">Два оператори одночасно перепризначають T-1199. Другий отримує conflict-відповідь (HTTP 409) і пропозицію refresh стану.</p>' +
-        '</div>' +
-        '<div class="card">' +
-          '<div class="card-title">done без закритого blocker</div>' +
-          '<p class="text-sm text-secondary">Спроба завершити T-1199 блокується: prerequisite «100% суми оплачено» не виконано. Код помилки: INVALID_TASK_TRANSITION.</p>' +
-        '</div>' +
-        '<div class="card">' +
-          '<div class="card-title">Role switch у відкритій черзі</div>' +
-          '<p class="text-sm text-secondary">Перемикання ролі з «Фінанси» на «Брокер» перевалідовує scope задач. Задачі Фінансів зникають, з\'являються задачі Брокера.</p>' +
-        '</div>' +
-        '<div class="card">' +
-          '<div class="card-title">Втрата зв\'язку під час complete</div>' +
-          '<p class="text-sm text-secondary">Оптимістичний апдейт статусу відкочується. Користувач отримує явний error з пропозицією повторити дію.</p>' +
-        '</div>' +
-      '</div>' +
-
-      // ═══════════════════════════════════════
       // Modals
-      // ═══════════════════════════════════════
       C.modal('task-assign', 'Призначити задачу',
+        '<div id="task-modal-context"></div>' +
         C.formGroup('Роль-власник', C.formSelect(['Брокер', 'Автологістика', 'Авіалогістика', 'Склад', 'Бухгалтерія', 'Фінанси', 'Продажі'])) +
         C.formGroup('Відповідальний', C.formSelect(['Дмитро С.', 'Андрій К.', 'Марія Л.', 'Лариса П.', 'Тетяна В.', 'Оксана М.', 'Віктор Г.'])) +
         '<p class="text-sm text-muted mt-8">Ця дія буде записана в audit trail.</p>',
-        C.btn('Призначити', 'btn-primary', 'onclick="closeModal(\'task-assign\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'task-assign\')"')
+        C.btn('Призначити', 'btn-primary', 'onclick="_taskModalConfirm(\'task-assign\',\'Задачу призначено\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'task-assign\')"')
       ) +
 
       C.modal('task-reassign', 'Перепризначити задачу',
+        '<div id="task-modal-context-reassign"></div>' +
         C.formGroup('Нова роль', C.formSelect(['Брокер', 'Автологістика', 'Авіалогістика', 'Склад', 'Бухгалтерія', 'Фінанси', 'Продажі'])) +
         C.formGroup('Новий відповідальний', C.formSelect(['Дмитро С.', 'Андрій К.', 'Марія Л.', 'Лариса П.', 'Тетяна В.', 'Оксана М.', 'Віктор Г.'])) +
-        C.formGroup('Причина перепризначення', C.formInput('Вкажіть причину…')) +
-        '<p class="text-sm text-muted mt-8">⚠ Критична дія — причина обов\'язкова. Запис у audit trail.</p>',
-        C.btn('Перепризначити', 'btn-primary', 'onclick="closeModal(\'task-reassign\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'task-reassign\')"')
+        C.formGroup('Причина перепризначення', '<input class="form-input" placeholder="Вкажіть причину\u2026">') +
+        '<p class="text-sm text-muted mt-8">\u26a0 Критична дія \u2014 причина обов\u02bcязкова. Запис у audit trail.</p>',
+        C.btn('Перепризначити', 'btn-primary', 'onclick="_taskModalConfirm(\'task-reassign\',\'Задачу перепризначено\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'task-reassign\')"')
       ) +
 
       C.modal('task-start', 'Розпочати задачу',
-        '<p>Задача перейде у статус <strong>in_progress</strong>.</p>' +
+        '<div id="task-modal-context-start"></div>' +
+        '<p>Задача перейде у статус <strong>\u00abУ роботі\u00bb</strong>.</p>' +
         '<p class="text-sm text-muted mt-8">Перехід буде зафіксовано в action log.</p>',
-        C.btn('Розпочати', 'btn-primary', 'onclick="closeModal(\'task-start\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'task-start\')"')
+        C.btn('Розпочати', 'btn-primary', 'onclick="_taskModalConfirm(\'task-start\',\'Задачу розпочато \u2014 статус У роботі\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'task-start\')"')
       ) +
 
       C.modal('task-complete', 'Завершити задачу',
-        '<p>Задача перейде у статус <strong>done</strong>.</p>' +
-        '<p class="text-sm text-warning mt-8">⚠ Після завершення задачу не можна редагувати. Повторне відкриття потребує explicit reopen з аудитом.</p>' +
+        '<div id="task-modal-context-complete"></div>' +
+        '<p>Задача перейде у статус <strong>\u00abВиконано\u00bb</strong>.</p>' +
+        '<p class="text-sm text-warning mt-8">\u26a0 Після завершення задачу не можна редагувати. Повторне відкриття потребує explicit reopen з аудитом.</p>' +
         '<p class="text-sm text-muted mt-8">Перехід буде заблоковано, якщо є невиконані prerequisites.</p>',
-        C.btn('Завершити', 'btn-primary', 'onclick="closeModal(\'task-complete\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'task-complete\')"')
+        C.btn('Завершити', 'btn-primary', 'onclick="_taskModalConfirm(\'task-complete\',\'Задачу завершено \u2014 статус Виконано\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'task-complete\')"')
       ) +
 
       C.modal('task-cancel', 'Скасувати задачу',
-        C.formGroup('Причина скасування', C.formInput('Обов\'язкове поле — вкажіть причину…')) +
-        '<p class="text-sm text-danger mt-8">⚠ Скасування breached задачі без аудиту причини заборонено. Код: TASK_CANCEL_REASON_REQUIRED.</p>',
-        C.btn('Скасувати задачу', 'btn-danger', 'onclick="closeModal(\'task-cancel\')"') + ' ' + C.btn('Назад', 'btn-ghost', 'onclick="closeModal(\'task-cancel\')"')
+        '<div id="task-modal-context-cancel"></div>' +
+        C.formGroup('Причина скасування', '<input class="form-input" placeholder="Обов\u02bcязкове поле \u2014 вкажіть причину\u2026">') +
+        '<p class="text-sm text-danger mt-8">\u26a0 Скасування breached задачі без аудиту причини заборонено.</p>',
+        C.btn('Скасувати задачу', 'btn-danger', 'onclick="_taskModalConfirm(\'task-cancel\',\'Задачу скасовано\')"') + ' ' + C.btn('Назад', 'btn-ghost', 'onclick="closeModal(\'task-cancel\')"')
       ) +
 
       C.modal('task-escalate', 'Ескалювати задачу',
-        C.formGroup('Рівень ескалації', C.formSelect(['L1 — Керівник підрозділу', 'L2 — Керівник операцій', 'L3 — Директор'])) +
-        C.formGroup('Причина ескалації', C.formInput('Обов\'язкове поле — вкажіть причину…')) +
-        C.formGroup('Очікуваний час вирішення', C.formInput('РРРР-ММ-ДД ГГ:ХХ', '2026-02-12 09:00')) +
-        '<p class="text-sm text-muted mt-8">Ескалація створить audit/event запис з причиною. Код: TASK_ESCALATION_REASON_REQUIRED.</p>',
-        C.btn('Ескалювати', 'btn-danger', 'onclick="closeModal(\'task-escalate\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'task-escalate\')"')
+        '<div id="task-modal-context-escalate"></div>' +
+        C.formGroup('Рівень ескалації', C.formSelect(['L1 \u2014 Керівник підрозділу', 'L2 \u2014 Керівник операцій', 'L3 \u2014 Директор'])) +
+        C.formGroup('Причина ескалації', '<input class="form-input" placeholder="Обов\u02bcязкове поле \u2014 вкажіть причину\u2026">') +
+        C.formGroup('Очікуваний час вирішення', '<input class="form-input" placeholder="РРРР-ММ-ДД ГГ:ХХ" value="2026-02-12 09:00">') +
+        '<p class="text-sm text-muted mt-8">Ескалація створить audit/event запис з причиною.</p>',
+        C.btn('Ескалювати', 'btn-danger', 'onclick="_taskModalConfirm(\'task-escalate\',\'Задачу ескальовано\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'task-escalate\')"')
       );
+
+    // Після рендеру DOM -- ініціалізувати інтерактивність
+    setTimeout(_taskInit, 60);
+
+    return html;
   },
 
   // ─── SH-05 Документи (redirect → вкладка «Документи» в кейсі) ───
@@ -1319,90 +1093,195 @@ registerPages({
   '#/shared/accounting-single-entry': function() {
     var d = DATA.accountingSingleEntry.data;
 
+    // ─── Helpers ───
+    var fgl = function(fg) {
+      return { invoice: 'Інвойс', cost_certificate: 'Довідка витрат', counterparty: 'Контрагент' }[fg] || fg;
+    };
+    var syncBadge = function(s) {
+      var m = { ready: ['Готово', 'done'], synced: ['В 1С', 'done'], blocked: ['Блок', 'blocked'] };
+      var p = m[s] || [s, ''];
+      return '<span class="badge-status ' + p[1] + '">' + p[0] + '</span>';
+    };
+    // Build conflict lookup: case_no+field_group → conflict object
+    var conflictMap = {};
+    (d.conflicts || []).forEach(function(c) {
+      conflictMap[c.case_no + ':' + c.field_group] = c;
+    });
+
     return C.pageHeader('Єдиний ввід бухгалтерських даних', 'SH-11 — Консоль єдиного вводу (P0: 2.1)') +
 
-      C.heroNotice('Єдиний ввід бухгалтерських даних',
-        '<strong>Для бухгалтерії та фінансів. P0 пріоритет (2.1).</strong> Усунення потрійного ручного вводу через єдиний capture реквізитів і їх перевикористання у всіх фінансових кроках.<br><br>' +
-        '<strong>Раніше (AS-IS):</strong> одні й ті самі реквізити (номер інвойсу, суми, контрагент) вводились тричі: при створенні довідки витрат, при рахунку клієнту, при рознесенні оплати. Кожен ввід — ризик помилки. Розбіжності між вводами виявлялись лише при звірці з 1С.<br>' +
-        '<strong>Тепер у F1 (TO-BE):</strong> ключові поля вводяться один раз і мають source_ref. Повторний ввід тих самих полів блокується або вимагає override з причиною. Первинне джерело — OCR + metadata з Document Hub. Конфлікти дублювання потрапляють у чергу для explicit resolve. Sync до 1С — лише для записів без конфліктів.') +
+      // ─── Hero Notice — compact workspace intro ───
+      C.heroNotice('Робоча консоль єдиного вводу',
+        'Це основний робочий екран бухгалтера для роботи з реквізитами документів. ' +
+        'Дані з інвойсів, довідок витрат і контрагентських документів потрапляють сюди автоматично через OCR або ручний ввід — і далі перевикористовуються у всіх фінансових кроках кейсу без повторного введення.<br><br>' +
+        '<strong>Щоденний цикл роботи:</strong> перевірити нові записи → вирішити конфлікти (якщо є) → синхронізувати з 1С.<br>' +
+        '<strong>Бухгалтер</strong> — вводить і верифікує дані. <strong>Фінансист</strong> — контролює перевизначення і конфлікти.') +
 
-      // Counters
+      // ─── Compact metrics strip ───
       C.statCards([
         { value: d.counters.coverage_rate, label: 'Покриття єдиним вводом', color: 'accent' },
-        { value: d.counters.override_count, label: 'Ручних overrides', color: 'warning' },
-        { value: d.counters.conflict_queue, label: 'Конфлікти в черзі', color: 'danger' },
-        { value: d.counters.ready_to_sync, label: 'Готово до sync 1С', color: 'success' },
-        { value: d.counters.triple_upload_eliminated_rate, label: 'Зниження потрійного вводу', color: 'accent' },
+        { value: d.counters.auto_captured + '/' + d.counters.total_entries_today, label: 'Авто / усього сьогодні', color: 'accent' },
+        { value: d.counters.override_count, label: 'Перевизначень', color: 'warning' },
+        { value: d.counters.conflict_queue, label: 'Конфліктів', color: 'danger' },
+        { value: d.counters.ready_to_sync, label: 'Готово до 1С', color: 'success' },
+        { value: d.counters.triple_upload_eliminated_rate, label: 'Зниження дублювання', color: 'accent' },
       ]) +
 
-      // Conflict Panel
-      C.section('Конфлікти дублювання') +
-      C.sectionHeroNotice('Черга конфліктів',
-        'Конфлікти виникають при спробі повторного введення вже зафіксованих даних з іншим значенням. Кожен конфлікт потребує explicit resolve або override з причиною.') +
-      C.sectionNotice('Правила вирішення',
-        'resolve — прийняти нове значення. override — залишити старе з обґрунтуванням. Обидві дії логуються в audit trail.') +
-      C.duplicateEntryConflictPanel(d.conflicts) +
-
-      // Filters
+      // ─── Filters (above table, workspace-style) ───
       C.filtersBar([
         { label: 'Усі', active: true },
         { label: 'Єдиний ввід' },
-        { label: 'Ручний override' },
+        { label: 'Перевизначені' },
         { label: 'З конфліктами' },
-        { label: 'Готово до sync' },
+        { label: 'Готові до 1С' },
+        { label: 'Синхронізовані' },
       ]) +
 
-      // Main Table
-      C.section('Реєстр записів') +
-      C.table(
-        ['Кейс', 'Документ', 'Група полів', 'Режим вводу', 'Джерело', 'Конфлікт', 'Оновив', 'Час', 'Дії'],
-        d.items.map(function(e) { return [
-          C.caseLink(e.case_no),
-          '<span class="font-mono text-sm">' + e.document_ref + '</span>',
-          C.typeLabel(e.field_group),
-          C.singleEntrySourceBadge(e.entry_mode),
-          '<span class="font-mono text-sm">' + e.source_ref + '</span>',
-          C.conflictStatusBadge(e.conflict_status),
-          e.last_updated_by,
-          e.updated_at,
-          C.reuseTo1CAction(e)
-        ]; })
-      ) +
+      // ─── Toolbar (above table, spreadsheet-style) ───
+      '<div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">' +
+        '<button class="btn btn-sm btn-primary" onclick="openModal(\'se-capture\')">+ Зафіксувати ввід</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="openModal(\'se-reuse\')">♻ Повторити в задачу</button>' +
+        '<button class="btn btn-sm btn-primary" onclick="openModal(\'se-sync\')">⬆ Синхронізувати з 1С (' + d.counters.ready_to_sync + ')</button>' +
+      '</div>' +
 
-      // Actions
-      C.actionBar('Дії з записами', [
-        { label: 'Capture single entry', cls: 'btn-primary', onclick: "openModal('se-capture')" },
-        { label: 'Повторити поля в задачу', cls: 'btn-secondary' },
-        { label: 'Resolve conflict', cls: 'btn-primary', onclick: "openModal('se-resolve')" },
-        { label: 'Override with reason', cls: 'btn-danger', onclick: "openModal('se-override')" },
-        { label: 'Sync to 1С', cls: 'btn-primary', onclick: "openModal('se-sync')" },
-      ]) +
+      // ══════════════════════════════════════════════════
+      // MAIN TABLE — the workspace centerpiece
+      // Conflict rows are highlighted inline, not as separate panel
+      // ══════════════════════════════════════════════════
+      '<div class="table-wrap"><table>' +
+      '<thead><tr>' +
+        '<th>Кейс</th><th>Документ</th><th>Група</th><th>Ввід</th><th>Джерело</th>' +
+        '<th>Конфлікт</th><th>1С</th><th>Оновив</th><th>Час</th><th>Дії</th>' +
+      '</tr></thead><tbody>' +
+      d.items.map(function(e) {
+        var conflict = conflictMap[e.case_no + ':' + e.field_group];
+        var isConflict = e.conflict_status === 'open';
+        var rowStyle = isConflict ? ' style="background:var(--danger-bg);"' : '';
 
-      // Modals
-      C.modal('se-capture', 'Capture single entry',
-        C.formGroup('Кейс', C.formInput('', 'F1-2026-00142')) +
-        C.formGroup('Група полів', C.formSelect(['invoice', 'cost_certificate', 'counterparty'])) +
-        C.formGroup('Джерело даних', C.formInput('Вкажіть source_ref…')) +
-        '<p class="text-sm text-muted mt-8">Дані будуть зафіксовані як single_entry з унікальним source_ref.</p>',
+        // Main row
+        var row = '<tr' + rowStyle + '>' +
+          '<td>' + C.caseLink(e.case_no) + '</td>' +
+          '<td><span class="font-mono text-sm">' + e.document_ref + '</span></td>' +
+          '<td>' + fgl(e.field_group) + '</td>' +
+          '<td>' + C.singleEntrySourceBadge(e.entry_mode) + '</td>' +
+          '<td><span class="font-mono text-sm">' + e.source_ref + '</span></td>' +
+          '<td>' + C.conflictStatusBadge(e.conflict_status) + '</td>' +
+          '<td>' + syncBadge(e.sync_status) + '</td>' +
+          '<td class="text-sm">' + e.last_updated_by + '</td>' +
+          '<td class="text-sm text-muted">' + e.updated_at + '</td>' +
+          '<td>' + C.reuseTo1CAction(e) + '</td>' +
+        '</tr>';
+
+        // Inline conflict detail row (no separate panel!)
+        if (isConflict && conflict) {
+          row += '<tr style="background:var(--danger-bg);">' +
+            '<td colspan="10" style="padding:8px 16px; border-top:none;">' +
+              '<div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">' +
+                '<span class="text-sm" style="color:var(--text-secondary);">' + conflict.field + ':</span>' +
+                '<span style="text-decoration:line-through; color:var(--danger);">' + conflict.existing_value + '</span>' +
+                '<span style="color:var(--text-muted);">→</span>' +
+                '<strong style="color:var(--success);">' + conflict.new_value + '</strong>' +
+                '<span class="text-sm text-muted">(з ' + conflict.source_ref + ')</span>' +
+                (conflict.impact ? '<span class="text-sm" style="color:var(--text-secondary); margin-left:8px;">— ' + conflict.impact + '</span>' : '') +
+                '<span style="margin-left:auto; display:flex; gap:6px;">' +
+                  '<button class="btn btn-sm btn-primary" onclick="openModal(\'se-resolve\')">Прийняти нове</button>' +
+                  '<button class="btn btn-sm btn-ghost" onclick="openModal(\'se-override\')">Залишити поточне</button>' +
+                '</span>' +
+              '</div>' +
+            '</td>' +
+          '</tr>';
+        }
+        return row;
+      }).join('') +
+      '</tbody></table></div>' +
+
+      // ─── Compact audit log (workspace footer, not a formal timeline) ───
+      '<div style="margin-top:20px;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
+          '<h2 class="section-title" style="margin:0;">Журнал</h2>' +
+          '<span class="text-sm text-muted">Останні ' + d.audit_trail.length + ' операцій</span>' +
+        '</div>' +
+        '<div class="table-wrap"><table style="font-size:13px;">' +
+        '<thead><tr><th>Час</th><th>Кейс</th><th>Що зроблено</th><th>Хто</th><th>Причина</th></tr></thead>' +
+        '<tbody>' +
+        d.audit_trail.map(function(a) {
+          var color = '';
+          if (a.action === 'conflict_detected') color = ' style="background:var(--danger-bg);"';
+          else if (a.action === 'override') color = ' style="background:var(--warning-bg);"';
+          return '<tr' + color + '>' +
+            '<td class="text-muted" style="white-space:nowrap;">' + a.timestamp + '</td>' +
+            '<td>' + (a.case_no ? C.caseLink(a.case_no) : '<span class="text-muted">—</span>') + '</td>' +
+            '<td>' + a.detail + '</td>' +
+            '<td style="white-space:nowrap;">' + a.actor + '</td>' +
+            '<td>' + (a.reason_code ? '<span class="font-mono text-sm">' + a.reason_code + '</span>' : '<span class="text-muted">—</span>') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>' +
+      '</div>' +
+
+      // ─── Modals (light, task-oriented, not approval-like) ───
+      C.modal('se-capture', 'Зафіксувати єдиний ввід',
+        C.formGroup('Кейс', C.formInput('Номер кейсу', 'F1-2026-00142')) +
+        C.formGroup('Група полів', C.formSelect([
+          {value: 'invoice', label: 'Інвойс (сума, валюта, номер)'},
+          {value: 'cost_certificate', label: 'Довідка витрат (сума, курс, статті)'},
+          {value: 'counterparty', label: 'Контрагент (ЄДРПОУ, назва, реквізити)'}
+        ])) +
+        C.formGroup('Джерело', C.formSelect([
+          {value: 'ocr', label: 'OCR з Document Hub'},
+          {value: 'manual', label: 'Ручний ввід'},
+          {value: '1c', label: 'Імпорт з 1С'}
+        ])) +
+        C.formGroup('Референс', C.formInput('OCR-AWB-142, INV-2026-0142…')) +
+        '<p class="text-sm text-muted mt-8">Після фіксації поля перевикористовуються у довідці витрат, рахунку і рознесенні оплати.</p>',
         C.btn('Зафіксувати', 'btn-primary', 'onclick="closeModal(\'se-capture\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'se-capture\')"')
       ) +
 
-      C.modal('se-resolve', 'Resolve conflict',
-        '<p>Ви приймаєте нове значення та закриваєте конфлікт.</p>' +
-        C.formGroup('Коментар', C.formInput('Вкажіть обґрунтування…')) +
-        '<p class="text-sm text-muted mt-8">Конфлікт буде закрито. Запис в audit trail.</p>',
-        C.btn('Прийняти нове значення', 'btn-primary', 'onclick="closeModal(\'se-resolve\')"') + ' ' + C.btn('Назад', 'btn-ghost', 'onclick="closeModal(\'se-resolve\')"')
+      C.modal('se-reuse', 'Повторити поля в задачу',
+        C.formGroup('Документ-джерело', C.formInput('', 'INV-2026-0142')) +
+        C.formGroup('Цільова задача', C.formSelect([
+          'Формування довідки витрат',
+          'Рахунок клієнту',
+          'Рознесення оплати в 1С',
+          'Акт закриття'
+        ])) +
+        '<p class="text-sm text-muted mt-8">Поля копіюються автоматично. Конфлікт — якщо цільова задача вже має дані.</p>',
+        C.btn('Повторити', 'btn-primary', 'onclick="closeModal(\'se-reuse\')"') + ' ' + C.btn('Скасувати', 'btn-ghost', 'onclick="closeModal(\'se-reuse\')"')
       ) +
 
-      C.modal('se-override', 'Override with reason',
-        C.formGroup('Причина override', C.formInput('Обов\'язково вкажіть причину…')) +
-        '<p class="text-sm text-danger mt-8">⚠ Override залишить поточне значення. Причина обов\'язкова. Запис в audit trail.</p>',
-        C.btn('Override', 'btn-danger', 'onclick="closeModal(\'se-override\')"') + ' ' + C.btn('Назад', 'btn-ghost', 'onclick="closeModal(\'se-override\')"')
+      C.modal('se-resolve', 'Прийняти нове значення',
+        C.formGroup('Конфлікт', C.formSelect(
+          d.conflicts.map(function(c) { return fgl(c.field_group) + ': ' + c.field + ' (' + c.existing_value + ' → ' + c.new_value + ')'; })
+        )) +
+        C.formGroup('Коментар', '<textarea class="form-input" rows="2" placeholder="Чому нове значення правильне…"></textarea>') +
+        '<p class="text-sm text-muted mt-8">Старе значення замінюється. Дія логується.</p>',
+        C.btn('Прийняти', 'btn-primary', 'onclick="closeModal(\'se-resolve\')"') + ' ' + C.btn('Назад', 'btn-ghost', 'onclick="closeModal(\'se-resolve\')"')
       ) +
 
-      C.modal('se-sync', 'Sync to 1С',
-        '<p>Ви ініціюєте синхронізацію записів з 1С.</p>' +
-        '<p class="text-sm text-warning mt-8">⚠ Sync можливий лише для записів без активних конфліктів. Перевірте чергу конфліктів.</p>',
+      C.modal('se-override', 'Залишити поточне значення',
+        C.formGroup('Конфлікт', C.formSelect(
+          d.conflicts.map(function(c) { return fgl(c.field_group) + ': ' + c.field + ' (' + c.existing_value + ' → ' + c.new_value + ')'; })
+        )) +
+        C.formGroup('Причина', C.formSelect([
+          {value: 'ocr_mismatch', label: 'Помилка OCR'},
+          {value: 'client_correction', label: 'Дані від клієнта'},
+          {value: 'source_outdated', label: 'Застаріле джерело'},
+          {value: 'manual_verification', label: 'Перевірено з оригіналом'},
+          {value: 'other', label: 'Інше'}
+        ])) +
+        C.formGroup('Коментар', '<textarea class="form-input" rows="2" placeholder="Деталі…"></textarea>') +
+        '<p class="text-sm text-warning mt-8">Нове значення відхиляється. Фінансист побачить причину.</p>',
+        C.btn('Залишити поточне', 'btn-secondary', 'onclick="closeModal(\'se-override\')"') + ' ' + C.btn('Назад', 'btn-ghost', 'onclick="closeModal(\'se-override\')"')
+      ) +
+
+      C.modal('se-sync', 'Синхронізація з 1С',
+        '<p class="text-sm" style="margin-bottom:8px;"><strong>' + d.ready_to_sync_items.length + '</strong> записів готові:</p>' +
+        '<div style="font-size:13px; margin-bottom:12px;">' +
+          d.ready_to_sync_items.map(function(r) {
+            return '<div style="padding:3px 0;">' + r.case_no + ' · ' + r.document_ref + ' · ' + fgl(r.field_group) + ' (' + r.fields_count + ' полів)</div>';
+          }).join('') +
+        '</div>' +
+        '<p class="text-sm text-muted">Записи з конфліктами не увійдуть. Після синку дані стають незмінними.</p>',
         C.btn('Синхронізувати', 'btn-primary', 'onclick="closeModal(\'se-sync\')"') + ' ' + C.btn('Назад', 'btn-ghost', 'onclick="closeModal(\'se-sync\')"')
       );
   },
@@ -2150,4 +2029,732 @@ function _clInit() {
 
   // Початковий рендер усіх динамічних частин
   _clRefresh();
+}
+
+// ═══════════════════════════════════════════════════════════
+// SH-04 Tasks & SLA — Інтерактивна логіка
+// ═══════════════════════════════════════════════════════════
+
+var _TASK_SLA_ORDER = { breached: 1, at_risk: 2, on_track: 3 };
+var _TASK_PRIORITY_ORDER = { high: 1, medium: 2, normal: 3, low: 4 };
+
+// ─── Хелпер: бейдж ескалації ───
+function _taskEscalationBadge(s) {
+  if (!s || s === 'not_escalated') return '<span class="badge-status">\u2014</span>';
+  return '<span class="badge-severity ' + (s === 'L2' ? 'high' : (s === 'L1' ? 'medium' : 'low')) + '">' + s + '</span>';
+}
+
+// ─── Хелпер: SLA таймер ───
+function _taskSlaTimer(dueAt, status) {
+  if (status === 'done' || status === 'cancelled') return '<span class="text-muted text-sm">\u2014</span>';
+  var due = new Date(dueAt.replace(' ', 'T') + ':00');
+  var now = new Date('2026-02-11T12:00:00');
+  var diff = due - now;
+  if (diff <= 0) return '<span class="text-danger font-bold text-sm">Прострочено</span>';
+  var hours = Math.floor(diff / 3600000);
+  var mins = Math.floor((diff % 3600000) / 60000);
+  if (hours < 4) return '<span class="text-warning font-bold text-sm">' + hours + ' год ' + mins + ' хв</span>';
+  return '<span class="text-sm">' + hours + ' год ' + mins + ' хв</span>';
+}
+
+// ─── Усі вихідні задачі ───
+function _taskAllItems() {
+  return DATA.tasks.data.items;
+}
+
+// ─── Обчислення відфільтрованих + відсортованих задач ───
+function _taskCompute() {
+  var st = window._taskState || {};
+  var items = _taskAllItems().slice();
+
+  // 1. Пошук
+  if (st.search) {
+    var q = st.search.toLowerCase().trim();
+    items = items.filter(function(t) {
+      return t.id.toLowerCase().indexOf(q) >= 0 ||
+        t.case_no.toLowerCase().indexOf(q) >= 0 ||
+        t.title.toLowerCase().indexOf(q) >= 0 ||
+        t.owner_role.toLowerCase().indexOf(q) >= 0 ||
+        t.owner_user.toLowerCase().indexOf(q) >= 0 ||
+        C.typeLabel(t.task_type).toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  // 2. Saved View пресети
+  var view = st.view || 'all';
+  if (view === 'overdue') {
+    items = items.filter(function(t) { return t.sla_state === 'breached'; });
+  } else if (view === 'at_risk') {
+    items = items.filter(function(t) { return t.sla_state === 'at_risk'; });
+  } else if (view === 'my_role') {
+    // Демо: фільтр за поточною роллю
+    var roleKey = '';
+    try { roleKey = _getPersistedRole() || ''; } catch(e) {}
+    var roleMap = {
+      'sales': 'Продажі', 'air-logistics': 'Авіалогістика', 'broker': 'Брокер',
+      'road-logistics': 'Автологістика', 'warehouse': 'Склад',
+      'accounting': 'Бухгалтерія', 'finance': 'Фінанси', 'expeditor': 'Експедитор'
+    };
+    var rl = roleMap[roleKey] || '';
+    if (rl) items = items.filter(function(t) { return t.owner_role === rl; });
+  } else if (view === 'arm_next_action') {
+    // АРМ: задачі, які потребують негайної дії (breached/at_risk, open/in_progress)
+    items = items.filter(function(t) {
+      return (t.sla_state === 'breached' || t.sla_state === 'at_risk') &&
+        (t.status === 'open' || t.status === 'in_progress');
+    });
+  } else if (view === 'in_progress') {
+    items = items.filter(function(t) { return t.status === 'in_progress'; });
+  }
+
+  // 3. Фільтри dropdown
+  var f = st.filters || {};
+  if (f.task_type) items = items.filter(function(t) { return t.task_type === f.task_type; });
+  if (f.owner_role) items = items.filter(function(t) { return t.owner_role === f.owner_role; });
+  if (f.status) items = items.filter(function(t) { return t.status === f.status; });
+  if (f.sla) items = items.filter(function(t) { return t.sla_state === f.sla; });
+  if (f.priority) items = items.filter(function(t) { return t.priority === f.priority; });
+
+  // 4. Сортування
+  var col = st.sortCol || 'sla_state';
+  var dir = st.sortDir || 'desc';
+  items.sort(function(a, b) {
+    var va, vb;
+    if (col === 'sla_state') { va = _TASK_SLA_ORDER[a.sla_state] || 9; vb = _TASK_SLA_ORDER[b.sla_state] || 9; }
+    else if (col === 'priority') { va = _TASK_PRIORITY_ORDER[a.priority] || 9; vb = _TASK_PRIORITY_ORDER[b.priority] || 9; }
+    else if (col === 'due_at') { va = a.due_at; vb = b.due_at; }
+    else if (col === 'id') { va = a.id; vb = b.id; }
+    else if (col === 'status') { va = a.status; vb = b.status; }
+    else if (col === 'owner_role') { va = a.owner_role; vb = b.owner_role; }
+    else if (col === 'task_type') { va = a.task_type; vb = b.task_type; }
+    else { va = a[col] || ''; vb = b[col] || ''; }
+    if (va < vb) return dir === 'asc' ? -1 : 1;
+    if (va > vb) return dir === 'asc' ? 1 : -1;
+    // Вторинне сортування
+    if (col !== 'sla_state') {
+      var sa = _TASK_SLA_ORDER[a.sla_state] || 9, sb = _TASK_SLA_ORDER[b.sla_state] || 9;
+      if (sa !== sb) return sa - sb;
+    }
+    if (col !== 'priority') {
+      var pa = _TASK_PRIORITY_ORDER[a.priority] || 9, pb = _TASK_PRIORITY_ORDER[b.priority] || 9;
+      if (pa !== pb) return pa - pb;
+    }
+    return 0;
+  });
+
+  return items;
+}
+
+// ─── Підрахунок для Saved Views ───
+function _taskViewCounts() {
+  var all = _taskAllItems();
+  var roleKey = '';
+  try { roleKey = _getPersistedRole() || ''; } catch(e) {}
+  var roleMap = {
+    'sales': 'Продажі', 'air-logistics': 'Авіалогістика', 'broker': 'Брокер',
+    'road-logistics': 'Автологістика', 'warehouse': 'Склад',
+    'accounting': 'Бухгалтерія', 'finance': 'Фінанси', 'expeditor': 'Експедитор'
+  };
+  var rl = roleMap[roleKey] || '';
+  return {
+    all: all.length,
+    overdue: all.filter(function(t) { return t.sla_state === 'breached'; }).length,
+    at_risk: all.filter(function(t) { return t.sla_state === 'at_risk'; }).length,
+    my_role: rl ? all.filter(function(t) { return t.owner_role === rl; }).length : 0,
+    arm_next_action: all.filter(function(t) {
+      return (t.sla_state === 'breached' || t.sla_state === 'at_risk') &&
+        (t.status === 'open' || t.status === 'in_progress');
+    }).length,
+    in_progress: all.filter(function(t) { return t.status === 'in_progress'; }).length
+  };
+}
+
+// ─── Перевірка чи є активні фільтри ───
+function _taskHasActiveFilters() {
+  var st = window._taskState || {};
+  if (st.search) return true;
+  if (st.view !== 'all') return true;
+  var f = st.filters || {};
+  for (var k in f) { if (f[k]) return true; }
+  return false;
+}
+
+// ─── Рендер stat cards ───
+function _taskRenderStats() {
+  var el = document.getElementById('task-stats');
+  if (!el) return;
+  var d = DATA.tasks.data;
+  el.innerHTML = C.statStrip([
+    { value: d.counters.active_tasks, label: 'Активні завдання', color: 'accent' },
+    { value: d.counters.at_risk_tasks, label: 'Під ризиком', color: 'warning' },
+    { value: d.counters.breached_tasks, label: 'Порушено SLA', color: 'danger' },
+    { value: d.counters.done_today, label: 'Завершено сьогодні', color: 'success' },
+  ]);
+}
+
+// ─── Рендер ARM mode ───
+function _taskRenderArm() {
+  var el = document.getElementById('task-arm');
+  if (!el) return;
+  var st = window._taskState || {};
+  var active = st.armMode;
+  el.innerHTML = '<div class="card mb-12" style="border-left:3px solid ' + (active ? 'var(--accent)' : 'var(--text-muted)') + ';">' +
+    '<div class="flex justify-between items-center">' +
+      '<div><span class="text-sm font-bold">Режим АРМ</span> <span class="text-sm text-muted">\u00b7 Фокус на \u00abnext best action\u00bb для поточної зміни</span></div>' +
+      '<div class="flex items-center gap-8">' +
+        C.statusBadge(active ? 'active' : 'pending') +
+        '<button class="btn btn-ghost btn-sm" onclick="_taskToggleArm()" title="' + (active ? 'Вимкнути' : 'Увімкнути') + ' АРМ">' + (active ? 'Вимкнути' : 'Увімкнути') + '</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+// ─── Рендер saved views ───
+function _taskRenderViews() {
+  var el = document.getElementById('task-views');
+  if (!el) return;
+  var st = window._taskState || {};
+  var counts = _taskViewCounts();
+  var views = [
+    { id: 'all', label: 'Усі завдання', icon: '\ud83d\udccb', count: counts.all },
+    { id: 'overdue', label: 'Прострочені', icon: '\ud83d\udd34', count: counts.overdue },
+    { id: 'at_risk', label: 'Під ризиком', icon: '\u26a0', count: counts.at_risk },
+    { id: 'my_role', label: 'Моя роль', icon: '\ud83d\udc64', count: counts.my_role },
+    { id: 'in_progress', label: 'У роботі', icon: '\u25b6', count: counts.in_progress },
+    { id: 'arm_next_action', label: 'АРМ: Next Action', icon: '\ud83c\udfaf', count: counts.arm_next_action },
+  ];
+  var h = '<div class="saved-views">';
+  views.forEach(function(v) {
+    var cls = v.id === st.view ? 'active' : '';
+    h += '<button class="saved-view-chip ' + cls + '" data-view="' + v.id + '" onclick="_taskSetView(\'' + v.id + '\')">' +
+      '<span class="saved-view-icon">' + v.icon + '</span>' + v.label +
+      '<span class="saved-view-count">' + v.count + '</span></button>';
+  });
+  h += '</div>';
+  el.innerHTML = h;
+}
+
+// ─── Рендер фільтрів ───
+function _taskRenderFilters() {
+  var el = document.getElementById('task-filters');
+  if (!el) return;
+  var allItems = _taskAllItems();
+  var st = window._taskState || {};
+  var f = st.filters || {};
+
+  var taskTypes = []; var ttSet = {};
+  var ownerRoles = []; var orSet = {};
+  var statuses = []; var stSet = {};
+  allItems.forEach(function(t) {
+    if (!ttSet[t.task_type]) { taskTypes.push(t.task_type); ttSet[t.task_type] = 1; }
+    if (!orSet[t.owner_role]) { ownerRoles.push(t.owner_role); orSet[t.owner_role] = 1; }
+    if (!stSet[t.status]) { statuses.push(t.status); stSet[t.status] = 1; }
+  });
+
+  function sel(label, key, opts, val) {
+    var h = '<div class="filter-dropdown-group"><label class="filter-dropdown-label">' + label + '</label>' +
+      '<select class="form-select form-select-sm" data-filter="' + key + '" onchange="_taskOnFilter(this)">';
+    opts.forEach(function(o) {
+      var selected = (o.value || '') === (val || '') ? ' selected' : '';
+      h += '<option value="' + (o.value || '') + '"' + selected + '>' + o.label + '</option>';
+    });
+    h += '</select></div>';
+    return h;
+  }
+
+  var h = '<div class="filter-dropdowns">';
+  h += sel('Тип задачі', 'task_type',
+    [{ label: 'Усі типи', value: '' }].concat(taskTypes.map(function(t) { return { label: C.typeLabel(t), value: t }; })),
+    f.task_type);
+  h += sel('Роль-власник', 'owner_role',
+    [{ label: 'Усі ролі', value: '' }].concat(ownerRoles.map(function(r) { return { label: r, value: r }; })),
+    f.owner_role);
+  h += sel('Статус', 'status',
+    [{ label: 'Усі статуси', value: '' },
+     { label: 'Відкрито', value: 'open' },
+     { label: 'У роботі', value: 'in_progress' },
+     { label: 'Виконано', value: 'done' },
+     { label: 'Скасовано', value: 'cancelled' }],
+    f.status);
+  h += sel('SLA', 'sla',
+    [{ label: 'Усі', value: '' }, { label: 'В нормі', value: 'on_track' }, { label: 'Під ризиком', value: 'at_risk' }, { label: 'Порушено', value: 'breached' }],
+    f.sla);
+  h += sel('Пріоритет', 'priority',
+    [{ label: 'Усі', value: '' }, { label: 'Високий', value: 'high' }, { label: 'Середній', value: 'medium' }, { label: 'Звичайний', value: 'normal' }],
+    f.priority);
+
+  var hasFilters = _taskHasActiveFilters();
+  h += '<button class="btn btn-ghost btn-sm filter-clear-btn' + (hasFilters ? ' cl-active-clear' : '') + '" onclick="_taskClearFilters()">' +
+    (hasFilters ? '\u2715 Очистити фільтри' : 'Очистити фільтри') + '</button>';
+  h += '</div>';
+  el.innerHTML = h;
+}
+
+// ─── Рендер інформації про сортування ───
+function _taskRenderSortInfo(filtered) {
+  var el = document.getElementById('task-sort-info');
+  if (!el) return;
+  var st = window._taskState || {};
+  var total = _taskAllItems().length;
+  var colLabels = {
+    sla_state: 'SLA стан', priority: 'Пріоритет', due_at: 'Дедлайн',
+    id: 'ID', status: 'Статус', owner_role: 'Роль', task_type: 'Тип'
+  };
+  var label = colLabels[st.sortCol] || st.sortCol;
+  var arrow = st.sortDir === 'asc' ? '\u2191' : '\u2193';
+
+  el.innerHTML = '<div class="cl-sort-bar">' +
+    '<div class="cl-sort-left">' +
+      '<span class="text-sm text-muted">Знайдено: <strong>' + filtered.length + '</strong>' +
+        (filtered.length !== total ? ' з ' + total : '') + ' завдань</span>' +
+    '</div>' +
+    '<div class="cl-sort-right">' +
+      '<span class="text-sm text-muted">Сортування: </span>' +
+      '<span class="sort-indicator cl-sort-active">' + label + ' ' + arrow + '</span>' +
+    '</div>' +
+  '</div>';
+}
+
+// ─── Рендер таблиці ───
+function _taskRenderTable(pageItems) {
+  var el = document.getElementById('task-table');
+  if (!el) return;
+  var st = window._taskState || {};
+
+  if (pageItems.length === 0) {
+    el.innerHTML =
+      '<div class="cl-empty-state">' +
+        '<div class="cl-empty-icon">\ud83d\udd0d</div>' +
+        '<div class="cl-empty-title">Завдань не знайдено</div>' +
+        '<p class="cl-empty-desc">За поточним фільтром або пошуковим запитом результатів немає.</p>' +
+        '<button class="btn btn-secondary" onclick="_taskClearFilters()">Очистити фільтри</button>' +
+      '</div>';
+    return;
+  }
+
+  var cols = [
+    { key: 'id', label: 'ID' },
+    { key: 'case_no', label: 'Кейс' },
+    { key: 'task_type', label: 'Тип' },
+    { key: '_title', label: 'Назва' },
+    { key: 'owner_role', label: 'Відповідальний' },
+    { key: '_timer', label: 'SLA таймер' },
+    { key: 'due_at', label: 'Термін' },
+    { key: 'status', label: 'Статус' },
+    { key: 'sla_state', label: 'SLA' },
+    { key: 'priority', label: 'Пріоритет' },
+    { key: '_source', label: 'Джерело' },
+    { key: '_escalation', label: 'Ескалація' },
+    { key: '_actions', label: 'Дії' }
+  ];
+
+  var h = '<div class="table-wrap"><table class="cl-table">';
+
+  // Заголовки з сортуванням
+  h += '<thead><tr>';
+  cols.forEach(function(col) {
+    if (col.key.charAt(0) === '_') {
+      h += '<th>' + col.label + '</th>';
+    } else {
+      var isActive = st.sortCol === col.key;
+      var arrow = isActive ? (st.sortDir === 'asc' ? ' \u2191' : ' \u2193') : '';
+      var cls = isActive ? 'cl-th-active' : 'cl-th-sortable';
+      h += '<th class="' + cls + '" onclick="_taskSort(\'' + col.key + '\')" title="Сортувати за: ' + col.label + '">' + col.label + arrow + '</th>';
+    }
+  });
+  h += '</tr></thead>';
+
+  h += '<tbody>';
+  pageItems.forEach(function(t) {
+    var rowCls = '';
+    if (t.sla_state === 'breached') rowCls = 'cl-row-breached';
+    else if (t.sla_state === 'at_risk') rowCls = 'cl-row-at-risk';
+    if (t.blocked_by && t.blocked_by.length > 0) rowCls += ' cl-row-exception';
+    var selected = st.selectedTaskId === t.id ? ' task-row-selected' : '';
+
+    h += '<tr class="cl-row ' + rowCls + selected + '" data-task="' + t.id + '" onclick="_taskOpenDetail(\'' + t.id + '\', event)">';
+    h += '<td class="cl-cell-case-no"><span class="font-mono text-sm">' + t.id + '</span></td>';
+    h += '<td>' + C.caseLink(t.case_no) + '</td>';
+    h += '<td>' + C.typeLabel(t.task_type) + '</td>';
+    h += '<td>' + t.title + (t.blocked_by && t.blocked_by.length > 0 ? ' <span class="badge-severity medium" title="Блокери: ' + t.blocked_by.join(', ') + '">\ud83d\udd12 ' + t.blocked_by.length + '</span>' : '') + '</td>';
+    h += '<td>' + t.owner_role + ' \u2014 ' + t.owner_user + '</td>';
+    h += '<td>' + _taskSlaTimer(t.due_at, t.status) + '</td>';
+    h += '<td class="cl-cell-date">' + t.due_at + '</td>';
+    h += '<td>' + C.statusBadge(t.status) + '</td>';
+    h += '<td>' + C.slaBadge(t.sla_state) + '</td>';
+    h += '<td>' + C.priorityBadge(t.priority) + '</td>';
+    h += '<td>' + C.sourceSystemBadge(t.source_system) + (t.external_task_id ? ' <span class="font-mono text-sm">' + t.external_task_id + '</span>' : '') + '</td>';
+    h += '<td>' + _taskEscalationBadge(t.escalation_status) + '</td>';
+    h += '<td class="cl-cell-actions" onclick="event.stopPropagation()">' +
+      '<div class="quick-actions-row">' +
+        (t.status === 'open' ? '<button class="btn btn-ghost btn-sm" onclick="_taskAction(\'task-start\',\'' + t.id + '\')" title="Розпочати">\u25b6</button>' : '') +
+        (t.status === 'in_progress' ? '<button class="btn btn-ghost btn-sm" onclick="_taskAction(\'task-complete\',\'' + t.id + '\')" title="Завершити">\u2713</button>' : '') +
+        '<button class="btn btn-ghost btn-sm" onclick="_taskAction(\'task-reassign\',\'' + t.id + '\')" title="Перепризначити">\ud83d\udc64</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="_taskAction(\'task-escalate\',\'' + t.id + '\')" title="Ескалювати">\u2b06</button>' +
+        (t.external_task_id ? '<button class="btn btn-ghost btn-sm" onclick="_taskShowToast(\'Sync зовнішнього стану запущено\')" title="Sync Plane">\ud83d\udd04</button>' : '') +
+      '</div>' +
+    '</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+
+  el.innerHTML = h;
+}
+
+// ─── Рендер пагінації ───
+function _taskRenderPagination(filtered) {
+  var el = document.getElementById('task-pagination');
+  if (!el) return;
+  var st = window._taskState || {};
+  var total = filtered.length;
+  var perPage = st.perPage || 10;
+  var totalPages = Math.max(1, Math.ceil(total / perPage));
+  var page = Math.min(st.page || 1, totalPages);
+
+  if (total === 0) { el.innerHTML = ''; return; }
+
+  var from = (page - 1) * perPage + 1;
+  var to = Math.min(page * perPage, total);
+
+  var h = '<div class="pagination-summary">' +
+    '<span class="text-sm text-muted">Показано ' + from + '\u2013' + to + ' з ' + total + ' завдань \u00b7 Сторінка ' + page + ' з ' + totalPages + '</span>' +
+    '<div class="pagination-controls">';
+  h += '<button class="btn btn-ghost btn-sm" ' + (page <= 1 ? 'disabled' : 'onclick="_taskSetPage(' + (page - 1) + ')"') + '>\u2190 Попередня</button>';
+  for (var i = 1; i <= totalPages; i++) {
+    if (i === page) {
+      h += '<span class="pagination-page-num cl-page-active">' + i + '</span>';
+    } else {
+      h += '<button class="btn btn-ghost btn-sm cl-page-btn" onclick="_taskSetPage(' + i + ')">' + i + '</button>';
+    }
+  }
+  h += '<button class="btn btn-ghost btn-sm" ' + (page >= totalPages ? 'disabled' : 'onclick="_taskSetPage(' + (page + 1) + ')"') + '>Наступна \u2192</button>';
+  h += '</div></div>';
+  el.innerHTML = h;
+}
+
+// ─── Рендер breach queue ───
+function _taskRenderBreachQueue() {
+  var el = document.getElementById('task-breach-queue');
+  if (!el) return;
+  var bq = DATA.tasks.data.breach_queue;
+  var h = C.sectionHeroNotice('Черга порушень SLA',
+    'Усі задачі зі станом SLA \u00abПорушено\u00bb. Кожна має статус ескалації, відповідального за next action і resolution_eta. Критична секція \u2014 кожне порушення потребує негайної реакції.');
+  h += C.sectionNotice('Ескалаційна модель',
+    'L1 \u2014 ескалація на керівника підрозділу. L2 \u2014 ескалація на керівника операцій. L3 \u2014 ескалація на директора. Кожна ескалація має reason_code, escalated_at і resolution_eta.');
+
+  h += '<div class="table-wrap"><table class="cl-table"><thead><tr>' +
+    '<th>ID</th><th>Кейс</th><th>Назва</th><th>Відповідальний</th><th>Дедлайн</th><th>Рівень</th><th>Ескалація на</th><th>Причина</th><th>Ескальовано</th><th>ETA</th><th>Дії</th>' +
+  '</tr></thead><tbody>';
+  bq.forEach(function(t) {
+    h += '<tr class="cl-row cl-row-breached" onclick="_taskOpenDetail(\'' + t.id + '\', event)">';
+    h += '<td class="cl-cell-case-no"><span class="font-mono text-sm">' + t.id + '</span></td>';
+    h += '<td>' + C.caseLink(t.case_no) + '</td>';
+    h += '<td>' + t.title + '</td>';
+    h += '<td>' + t.owner_role + ' \u2014 ' + t.owner_user + '</td>';
+    h += '<td><span class="text-danger">' + t.due_at + '</span></td>';
+    h += '<td><span class="badge-severity ' + (t.escalation_level === 'L2' ? 'high' : 'medium') + '">' + t.escalation_level + '</span></td>';
+    h += '<td>' + t.escalated_to_role + '</td>';
+    h += '<td class="text-sm">' + t.escalation_reason + '</td>';
+    h += '<td class="cl-cell-date">' + t.escalated_at + '</td>';
+    h += '<td class="cl-cell-date">' + t.resolution_eta + '</td>';
+    h += '<td class="cl-cell-actions" onclick="event.stopPropagation()">' +
+      '<div class="quick-actions-row">' +
+        '<button class="btn btn-ghost btn-sm" onclick="_taskAction(\'task-escalate\',\'' + t.id + '\')" title="Ескалювати далі">\u2b06</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="_taskAction(\'task-reassign\',\'' + t.id + '\')" title="Перепризначити">\ud83d\udc64</button>' +
+      '</div></td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+
+  h += C.actionBar('Дії з порушеннями', [
+    { label: 'Ескалювати далі', cls: 'btn-danger', onclick: "openModal('task-escalate')" },
+    { label: 'Перепризначити', cls: 'btn-secondary', onclick: "openModal('task-reassign')" },
+    { label: 'Відкрити виняток', cls: 'btn-secondary', onclick: "navigate('#/shared/exceptions')" },
+  ]);
+  el.innerHTML = h;
+}
+
+// ─── Рендер деталей задачі ───
+function _taskRenderDetail() {
+  var el = document.getElementById('task-detail-content');
+  if (!el) return;
+  var st = window._taskState || {};
+  var taskId = st.selectedTaskId;
+
+  // Шукаємо задачу: спочатку в items, потім fallback на task_detail
+  var td = null;
+  if (taskId) {
+    var items = _taskAllItems();
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id === taskId) { td = items[i]; break; }
+    }
+  }
+  // Для задач з items у нас немає повного detail — використовуємо task_detail як fallback
+  var fullDetail = DATA.tasks.data.task_detail;
+  if (!td && fullDetail) td = fullDetail;
+  if (td && td.id === fullDetail.id) {
+    // Доповнюємо даними з повного detail
+    td = Object.assign({}, td, {
+      case_context: fullDetail.case_context,
+      prerequisites: fullDetail.prerequisites,
+      action_log: fullDetail.action_log
+    });
+  }
+
+  if (!td) {
+    el.innerHTML = '<div class="cl-empty-state">' +
+      '<div class="cl-empty-icon">\ud83d\udc46</div>' +
+      '<div class="cl-empty-title">Оберіть задачу</div>' +
+      '<p class="cl-empty-desc">Натисніть на рядок задачі у черзі або черзі порушень, щоб побачити деталі.</p>' +
+    '</div>';
+    return;
+  }
+
+  var h = C.sectionHeroNotice('Деталі задачі: ' + td.id,
+    'Повний контекст задачі з prerequisite-чеклістом, блокерами та action log. Кожна критична дія фіксується з actor/time/reason.');
+
+  // Task header
+  h += '<div class="card mb-16">' +
+    '<div class="card-header"><span class="card-title">' + td.title + '</span> ' + C.slaBadge(td.sla_state) + ' ' + C.priorityBadge(td.priority) + ' ' + _taskEscalationBadge(td.escalation_status) + '</div>' +
+    '<div class="card-grid">' +
+      '<div>' +
+        '<div class="doc-meta-row"><span class="doc-meta-label">ID задачі</span><span class="doc-meta-value font-mono">' + td.id + '</span></div>' +
+        '<div class="doc-meta-row"><span class="doc-meta-label">Кейс</span><span class="doc-meta-value">' + C.caseLink(td.case_no) + '</span></div>' +
+        '<div class="doc-meta-row"><span class="doc-meta-label">Тип</span><span class="doc-meta-value">' + C.typeLabel(td.task_type) + '</span></div>' +
+        '<div class="doc-meta-row"><span class="doc-meta-label">Статус</span><span class="doc-meta-value">' + C.statusBadge(td.status) + '</span></div>' +
+        '<div class="doc-meta-row"><span class="doc-meta-label">Дедлайн</span><span class="doc-meta-value">' + td.due_at + '</span></div>' +
+        '<div class="doc-meta-row"><span class="doc-meta-label">SLA таймер</span><span class="doc-meta-value">' + _taskSlaTimer(td.due_at, td.status) + '</span></div>' +
+      '</div>' +
+      '<div>' +
+        '<div class="doc-meta-row"><span class="doc-meta-label">Відповідальна роль</span><span class="doc-meta-value">' + td.owner_role + '</span></div>' +
+        '<div class="doc-meta-row"><span class="doc-meta-label">Відповідальний</span><span class="doc-meta-value">' + td.owner_user + '</span></div>' +
+        '<div class="doc-meta-row"><span class="doc-meta-label">Блокери</span><span class="doc-meta-value">' + (td.blocked_by && td.blocked_by.length > 0 ? td.blocked_by.map(function(b) { return '<span class="badge-severity medium">' + b + '</span>'; }).join(' ') : '<span class="text-muted">Немає</span>') + '</span></div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  // Case context (якщо є)
+  if (td.case_context) {
+    h += C.section('Контекст кейсу') +
+    '<div class="card mb-16">' +
+      '<div class="doc-meta-row"><span class="doc-meta-label">Клієнт</span><span class="doc-meta-value">' + td.case_context.client + '</span></div>' +
+      '<div class="doc-meta-row"><span class="doc-meta-label">Етап</span><span class="doc-meta-value">' + td.case_context.stage + '</span></div>' +
+      '<div class="doc-meta-row"><span class="doc-meta-label">Очікувана сума</span><span class="doc-meta-value">' + td.case_context.expected_amount + '</span></div>' +
+      '<div class="doc-meta-row"><span class="doc-meta-label">Отримано</span><span class="doc-meta-value">' + td.case_context.received_amount + '</span></div>' +
+      '<div class="doc-meta-row"><span class="doc-meta-label">Недоплата</span><span class="doc-meta-value text-danger font-bold">' + td.case_context.shortfall + '</span></div>' +
+      '<div class="mt-8">' + C.link('#/shared/timeline', 'Відкрити повну картку кейсу \u2192') + '</div>' +
+    '</div>';
+  }
+
+  // Prerequisites (якщо є)
+  if (td.prerequisites) {
+    h += C.section('Prerequisite-чекліст') + C.checklist(td.prerequisites);
+  }
+
+  // Action Log (якщо є)
+  if (td.action_log) {
+    h += C.section('Журнал дій') +
+    '<div class="table-wrap"><table>' +
+      '<thead><tr><th>Час</th><th>Актор</th><th>Дія</th><th>Причина</th><th>Код</th></tr></thead>' +
+      '<tbody>' + td.action_log.map(function(a) {
+        return '<tr>' +
+          '<td class="text-sm text-muted">' + a.ts + '</td>' +
+          '<td>' + a.actor + '</td>' +
+          '<td>' + a.action + '</td>' +
+          '<td class="text-sm">' + a.reason + '</td>' +
+          '<td><span class="text-sm" title="' + a.reason_code + '">' + C.reasonCodeLabel(a.reason_code) + '</span></td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody>' +
+    '</table></div>';
+  }
+
+  // Action bar
+  var actions = [];
+  if (td.status === 'open') actions.push({ label: 'Розпочати', cls: 'btn-primary', onclick: "_taskAction('task-start','" + td.id + "')" });
+  if (td.status === 'in_progress') actions.push({ label: 'Завершити', cls: 'btn-primary', onclick: "_taskAction('task-complete','" + td.id + "')" });
+  actions.push({ label: 'Перепризначити', cls: 'btn-secondary', onclick: "_taskAction('task-reassign','" + td.id + "')" });
+  actions.push({ label: 'Ескалювати', cls: 'btn-danger', onclick: "_taskAction('task-escalate','" + td.id + "')" });
+  if (td.status !== 'done' && td.status !== 'cancelled') {
+    actions.push({ label: 'Скасувати', cls: 'btn-ghost', onclick: "_taskAction('task-cancel','" + td.id + "')" });
+  }
+  h += C.actionBar('Дії із задачею ' + td.id, actions);
+
+  // Кнопка повернення
+  h += '<div class="mt-12"><button class="btn btn-ghost" onclick="_taskBackToInbox()">\u2190 Повернутись до черги задач</button></div>';
+
+  el.innerHTML = h;
+}
+
+// ─── Головна функція оновлення ───
+function _taskRefresh() {
+  var st = window._taskState || {};
+  var filtered = _taskCompute();
+
+  var perPage = st.perPage || 10;
+  var totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  if (st.page > totalPages) st.page = 1;
+
+  var from = ((st.page || 1) - 1) * perPage;
+  var pageItems = filtered.slice(from, from + perPage);
+
+  _taskRenderStats();
+  _taskRenderArm();
+  _taskRenderViews();
+  _taskRenderFilters();
+  _taskRenderSortInfo(filtered);
+  _taskRenderTable(pageItems);
+  _taskRenderPagination(filtered);
+  _taskRenderBreachQueue();
+  _taskRenderDetail();
+}
+
+// ─── Обробники подій ───
+var _taskSearchTimer = null;
+function _taskOnSearch(e) {
+  var st = window._taskState || {};
+  clearTimeout(_taskSearchTimer);
+  _taskSearchTimer = setTimeout(function() {
+    st.search = (e.target.value || '').trim();
+    st.page = 1;
+    _taskRefresh();
+  }, 200);
+}
+
+function _taskSetView(id) {
+  var st = window._taskState || {};
+  st.view = id;
+  st.page = 1;
+  st.filters = {};
+  _taskRefresh();
+}
+
+function _taskOnFilter(selectEl) {
+  var st = window._taskState || {};
+  var key = selectEl.getAttribute('data-filter');
+  var val = selectEl.value || '';
+  if (!st.filters) st.filters = {};
+  st.filters[key] = val;
+  st.page = 1;
+  _taskRefresh();
+}
+
+function _taskClearFilters() {
+  window._taskState = {
+    search: '', view: 'all', filters: {}, sortCol: 'sla_state', sortDir: 'desc',
+    page: 1, perPage: (window._taskState || {}).perPage || 10,
+    selectedTaskId: (window._taskState || {}).selectedTaskId,
+    armMode: (window._taskState || {}).armMode
+  };
+  var searchEl = document.getElementById('task-search');
+  if (searchEl) searchEl.value = '';
+  _taskRefresh();
+}
+
+function _taskSort(col) {
+  var st = window._taskState || {};
+  if (st.sortCol === col) {
+    st.sortDir = st.sortDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    st.sortCol = col;
+    st.sortDir = 'desc';
+  }
+  st.page = 1;
+  _taskRefresh();
+}
+
+function _taskSetPage(n) {
+  var st = window._taskState || {};
+  st.page = n;
+  _taskRefresh();
+  var tbl = document.getElementById('task-table');
+  if (tbl) tbl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function _taskToggleArm() {
+  var st = window._taskState || {};
+  st.armMode = !st.armMode;
+  _taskRenderArm();
+}
+
+function _taskOpenDetail(taskId, event) {
+  if (event && (event.target.tagName === 'BUTTON' || event.target.tagName === 'A' || event.target.closest('button') || event.target.closest('a'))) return;
+  var st = window._taskState || {};
+  st.selectedTaskId = taskId;
+  // Перемикаємо на таб деталей
+  var tabs = document.querySelectorAll('.tab-item');
+  for (var i = 0; i < tabs.length; i++) {
+    var btn = tabs[i];
+    if (btn.getAttribute('onclick') && btn.getAttribute('onclick').indexOf("'task-detail'") !== -1) {
+      btn.click();
+      break;
+    }
+  }
+  _taskRenderDetail();
+  _taskRenderTable(_taskCompute().slice(0, (st.perPage || 10))); // Оновити виділення
+}
+
+function _taskBackToInbox() {
+  var tabs = document.querySelectorAll('.tab-item');
+  for (var i = 0; i < tabs.length; i++) {
+    var btn = tabs[i];
+    if (btn.getAttribute('onclick') && btn.getAttribute('onclick').indexOf("'role-inbox'") !== -1) {
+      btn.click();
+      break;
+    }
+  }
+}
+
+function _taskAction(modalId, taskId) {
+  var st = window._taskState || {};
+  st.selectedTaskId = taskId;
+  // Знайти задачу для контексту в модалці
+  var task = null;
+  var items = _taskAllItems();
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].id === taskId) { task = items[i]; break; }
+  }
+  // Заповнити контекст модалки
+  var contextId = 'task-modal-context' + (modalId === 'task-assign' ? '' : '-' + modalId.replace('task-', ''));
+  var ctxEl = document.getElementById(contextId);
+  if (ctxEl && task) {
+    ctxEl.innerHTML = '<div class="card mb-12" style="background:var(--surface-secondary);padding:8px 12px;">' +
+      '<span class="font-mono text-sm font-bold">' + task.id + '</span> ' +
+      '<span class="text-sm">' + task.title + '</span> ' +
+      C.slaBadge(task.sla_state) + ' ' + C.statusBadge(task.status) +
+    '</div>';
+  }
+  openModal(modalId);
+}
+
+function _taskModalConfirm(modalId, message) {
+  closeModal(modalId);
+  _taskShowToast(message + '. Зміна записана в audit trail.');
+}
+
+function _taskShowToast(msg) {
+  var existing = document.getElementById('task-toast');
+  if (existing) existing.remove();
+  var t = document.createElement('div');
+  t.id = 'task-toast';
+  t.className = 'cl-toast cl-toast-show';
+  t.innerHTML = '<span class="cl-toast-icon">\u2713</span> ' + msg;
+  document.body.appendChild(t);
+  setTimeout(function() { t.classList.add('cl-toast-hide'); }, 2500);
+  setTimeout(function() { t.remove(); }, 3000);
+}
+
+// ─── Ініціалізація (після рендеру DOM) ───
+function _taskInit() {
+  var searchEl = document.getElementById('task-search');
+  if (searchEl) {
+    searchEl.addEventListener('input', _taskOnSearch);
+    searchEl.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { searchEl.value = ''; window._taskState.search = ''; window._taskState.page = 1; _taskRefresh(); }
+    });
+    searchEl.focus();
+  }
+
+  // Початковий рендер усіх динамічних частин
+  _taskRefresh();
 }

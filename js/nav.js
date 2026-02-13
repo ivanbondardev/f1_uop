@@ -7,17 +7,18 @@ const NAV_CONFIG = [
     title: 'Основне',
     items: [
       { icon: '📋', label: 'Кейси', hash: '#/shared/cases' },
-      { icon: '✅', label: 'Завдання та SLA', hash: '#/shared/tasks' },
+      { icon: '✅', label: 'Завдання та SLA', hash: '#/shared/tasks', badge: 8 },
       { icon: '⚠', label: 'Винятки', hash: '#/shared/exceptions', badge: 5 },
       { icon: '🛡', label: 'Рішення', hash: '#/shared/approvals', badge: 3 },
       { icon: '📊', label: 'Звіти', hash: '#/shared/reports' },
     ]
   },
   {
-    title: 'P0 Модулі',
+    title: 'Пріоритетне',
+    p0: true,
     items: [
-      { icon: '🔄', label: 'Дошка передач (SH-10)', hash: '#/shared/handover-board', badge: 5 },
-      { icon: '📊', label: 'Консоль єдиного вводу (SH-11)', hash: '#/shared/accounting-single-entry', badge: 3 },
+      { icon: '🔄', label: 'Дошка передач', hash: '#/shared/handover-board', badge: 4 },
+      { icon: '📊', label: 'Консоль єдиного вводу', hash: '#/shared/accounting-single-entry', badge: 2 },
     ]
   },
   { divider: true },
@@ -150,7 +151,12 @@ function renderSidebar(activeHash) {
     if (activeRole && section.role && section.role !== activeRole) {
       return;
     }
-    html += `<div class="nav-section${section.role === activeRole ? ' nav-section--active-role' : ''}">`;
+    const sectionCls = [
+      'nav-section',
+      section.role === activeRole ? 'nav-section--active-role' : '',
+      section.p0 ? 'nav-section--p0' : '',
+    ].filter(Boolean).join(' ');
+    html += `<div class="${sectionCls}">`;
     html += `<div class="nav-section-title">${section.title}</div>`;
     section.items.forEach(item => {
       const isActive = activeHash === item.hash && !item.tabTarget;
