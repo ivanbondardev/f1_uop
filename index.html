@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>F1 Операційна Платформа — Демо UI/UX</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-shell" id="app">
+    <!-- Верхня панель -->
+    <header class="topbar" role="banner">
+      <div class="topbar-left">
+        <button class="topbar-btn mobile-menu-btn" aria-label="Відкрити меню навігації" onclick="toggleMobileNav()">&#9776;</button>
+        <div class="topbar-logo">F1 <span>Операції</span></div>
+        <div class="global-search">
+          <label for="globalSearch" class="sr-only">Пошук кейсів за номером кейсу, AWB, CMR або клієнтом</label>
+          <input type="text" placeholder="Пошук: кейс, AWB, CMR, клієнт..." id="globalSearch">
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button class="topbar-btn notices-toggle" id="noticesToggle" aria-label="Приховати підказки" title="Приховати підказки" onclick="toggleNotices()">
+          <span class="notices-toggle-label" id="noticesToggleLabel">Підказки</span>
+        </button>
+        <div id="topbarIntegrationHealth" style="position:relative;"></div>
+        <div class="notif-dropdown-wrap">
+          <button class="topbar-btn" aria-label="Сповіщення" title="Сповіщення" onclick="toggleNotifDropdown(event)">
+            &#128276;<span class="badge-count" id="notifBadge"></span>
+          </button>
+          <div class="notif-dropdown" id="notifDropdown"></div>
+        </div>
+        <div class="role-switcher">
+          <label for="roleSwitcher" class="sr-only">Перемкнути активну роль</label>
+          <select id="roleSwitcher" onchange="switchRole(this.value)">
+            <option value="">Усі ролі</option>
+            <option value="sales">Продажі</option>
+            <option value="air-logistics">Авіалогістика</option>
+            <option value="broker">Брокер</option>
+            <option value="road-logistics">Автологістика</option>
+            <option value="warehouse">Склад</option>
+            <option value="accounting">Бухгалтерія</option>
+            <option value="finance">Фінанси</option>
+            <option value="expeditor">Експедитор (Польща)</option>
+            <option value="ops-admin">Операційний адміністратор</option>
+          </select>
+        </div>
+        <div class="profile-dropdown-wrap" id="profileDropdownWrap">
+          <button class="topbar-btn" aria-label="Профіль користувача" title="Профіль">&#128100;</button>
+        </div>
+      </div>
+    </header>
+    <!-- Накладка мобільного меню -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileNav()"></div>
+
+    <!-- Бічна навігація -->
+    <nav class="sidebar" id="sidebar"></nav>
+
+    <!-- Основна область вмісту -->
+    <main class="main-content" id="mainContent"></main>
+  </div>
+
+  <!-- Шар даних -->
+  <script src="js/data.js"></script>
+
+  <!-- Базові модулі -->
+  <script src="js/router.js"></script>
+  <script src="js/components.js"></script>
+  <script src="js/nav.js"></script>
+
+  <!-- Рендерери сторінок -->
+  <script src="js/pages-shared.js"></script>
+  <script src="js/pages-sales.js"></script>
+  <script src="js/pages-air.js"></script>
+  <script src="js/pages-broker.js"></script>
+  <script src="js/pages-road.js"></script>
+  <script src="js/pages-wh.js"></script>
+  <script src="js/pages-acc.js"></script>
+  <script src="js/pages-fin.js"></script>
+  <script src="js/pages-expeditor.js"></script>
+  <script src="js/pages-ops.js"></script>
+  <script src="js/pages-flows.js"></script>
+
+  <!-- Точка входу застосунку (має бути останньою) -->
+  <script src="js/app.js"></script>
+</body>
+</html>

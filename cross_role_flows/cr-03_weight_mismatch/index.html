@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CR-03 Розбіжність ваги — UIUX PoC</title>
+  <link rel="stylesheet" href="../../../assets/css/styles.css">
+</head>
+<body>
+  <header class="page-header" role="banner">
+    <h1>CR-03 Розбіжність ваги</h1>
+    <p style="margin:0; color: var(--text-secondary); font-size: 13px;">Розбіжність ваги CMR/AWB/Invoice</p>
+  </header>
+
+  <main class="page-main" role="main">
+    <section class="hero-notice" aria-label="Головний контекст сторінки">
+      <p class="notice-title">hero-notice: Розбіжність ваги</p>
+      <p><strong>Для брокера, логіста, менеджера.</strong> Сценарій, коли вага в CMR, AWB та Invoice не збігається. Потрібне з'ясування причини та корекція.</p>
+      <p><strong>Раніше (AS-IS):</strong> розбіжність ваги виявляв брокер при підготовці митних документів. Далі починався email-пінг між логістом, менеджером і агентом. Хто відповідальний за корекцію і який дедлайн — визначали ситуативно.</p>
+      <p><strong>Тепер у F1 (TO-BE):</strong> side-by-side порівняння метаданих документів із автоматичними прапорцями розбіжностей. Запит корекцій — як структурований виняток із owner-role, SLA та селектором першопричини. Історія корекцій зберігається в timeline. Передача блокується до вирішення розбіжності (TC-BR-01).</p>
+    </section>
+
+    <section class="section" aria-labelledby="compare-title">
+      <h2 id="compare-title">Порівняння метаданих</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Порівняння метаданих</p>
+        <p>Порівняння ключових полів документів для виявлення розбіжностей.</p>
+      </div>
+      <script type="application/json" id="mock-compare">
+        {
+          "meta": { "source": "dummy", "version": "poc", "contract_id": "CR-03_weight_mismatch_flow" },
+          "data": {
+            "fields": [
+              { "field": "weight_kg", "cmr": "820", "awb": "820", "invoice": "815", "match": false },
+              { "field": "pieces", "cmr": "12", "awb": "12", "invoice": "12", "match": true },
+              { "field": "volume_m3", "cmr": "2.4", "awb": "2.4", "invoice": "2.4", "match": true }
+            ],
+            "root_cause": "invoice_weight_typo",
+            "exception_status": "investigating"
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Поле</th>
+              <th>CMR</th>
+              <th>AWB</th>
+              <th>Invoice</th>
+              <th>Збіг</th>
+            </tr>
+          </thead>
+          <tbody id="compare-tbody"></tbody>
+        </table>
+      </div>
+      <div class="card" id="root-cause-card"></div>
+    </section>
+
+    <section class="section" aria-labelledby="corrections-title">
+      <h2 id="corrections-title">Історія запитаних корекцій</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Історія корекцій</p>
+        <p>Журнал запитів на коригування документів.</p>
+      </div>
+      <script type="application/json" id="mock-corrections">
+        {
+          "meta": { "source": "dummy", "version": "poc" },
+          "data": {
+            "items": [
+              { "id": "COR-001", "requested_at": "2024-02-08T14:00:00Z", "document": "invoice", "requestor": "broker_user", "status": "pending" },
+              { "id": "COR-002", "requested_at": "2024-02-07T10:30:00Z", "document": "awb", "requestor": "accounting_user", "status": "resolved" }
+            ]
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Час</th><th>Документ</th><th>Ініціатор</th><th>Статус</th></tr>
+          </thead>
+          <tbody id="corrections-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="approval-overlay-title">
+      <h2 id="approval-overlay-title">Шлюз затвердження</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Шлюзи затвердження при розбіжностях</p>
+        <p>Якщо зміни торкаються фінальних документів або ставки, запускається відповідний шлюз затвердження.</p>
+      </div>
+      <script type="application/json" id="mock-approval-overlay">
+        {
+          "meta": { "source": "dummy", "version": "poc" },
+          "data": {
+            "approvals": [
+              { "scenario": "Зміна фінальних документів", "approval_type": "DOC_FINALIZATION_APPROVAL", "approver_role": "ROAD_LOGISTICS / BROKER", "decision_status": "pending", "verification_mode": "standard" },
+              { "scenario": "Зміна ставки", "approval_type": "RATE_OUTLIER_APPROVAL", "approver_role": "ROAD_LOGISTICS_LEAD", "decision_status": "pending", "verification_mode": "standard" }
+            ]
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Сценарій</th><th>Тип рішення</th><th>Роль-затверджувач</th><th>Статус рішення</th><th>Верифікація</th></tr>
+          </thead>
+          <tbody id="approval-overlay-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <nav style="margin-top: 2rem;">
+      <a href="../../../index.html" class="btn btn-secondary">← До індексу</a>
+    </nav>
+  </main>
+
+  <script src="../../../assets/js/mock-render.js"></script>
+  <script>
+    (function() {
+      // ── UA label maps ──
+      var statusLabels = { pending: 'В очікуванні', resolved: 'Вирішено', open: 'Відкрито', investigating: 'Розслідування', closed: 'Закрито', done: 'Виконано' };
+      var exceptionLabels = { open: 'Відкрито', investigating: 'Розслідування', resolved: 'Вирішено', closed: 'Закрито' };
+      var matchLabels = { true: 'Збіг', false: 'Розбіжність' };
+      var rootCauseLabels = { invoice_weight_typo: 'Помилка ваги в інвойсі', weighing_error: 'Помилка зважування', palletization_diff: 'Відмінність палетизації', doc_error: 'Помилка в документах', humidity_deviation: 'Відхилення вологості' };
+      var roleLabels = { broker_user: 'Брокер', accounting_user: 'Бухгалтерія', finance_user: 'Фінанси', air_logistics: 'Авіалогістика', ROAD_LOGISTICS: 'Автологістика', BROKER: 'Брокер', ROAD_LOGISTICS_LEAD: 'Керівник автологістики', 'ROAD_LOGISTICS / BROKER': 'Автологістика / Брокер' };
+      var fieldLabels = { weight_kg: 'Вага (кг)', pieces: 'Кількість місць', volume_m3: 'Обʼєм (м³)' };
+
+      var compare = window.MockRender.getMock("mock-compare");
+      var tbody = document.getElementById("compare-tbody");
+      if (tbody && compare.data && compare.data.fields) {
+        tbody.innerHTML = compare.data.fields.map(function(f) {
+          var matchClass = f.match ? "sla-badge on-track" : "sla-badge breached";
+          var matchText = f.match ? "Збіг" : "Розбіжність";
+          return "<tr><td>" + (fieldLabels[f.field] || f.field) + "</td><td>" + f.cmr + "</td><td>" + f.awb + "</td><td>" + f.invoice + "</td><td><span class=\"" + matchClass + "\">" + matchText + "</span></td></tr>";
+        }).join("");
+      }
+
+      var rootCard = document.getElementById("root-cause-card");
+      if (rootCard && compare.data) {
+        rootCard.innerHTML = "<p><strong>Першопричина:</strong> " + (rootCauseLabels[compare.data.root_cause] || compare.data.root_cause || "—") + "</p>" +
+          "<p><strong>Стан винятку:</strong> " + (exceptionLabels[compare.data.exception_status] || compare.data.exception_status || "—") + "</p>";
+      }
+
+      var corr = window.MockRender.getMock("mock-corrections");
+      var corrTbody = document.getElementById("corrections-tbody");
+      if (corrTbody && corr.data && corr.data.items) {
+        corrTbody.innerHTML = corr.data.items.map(function(i) {
+          return "<tr><td>" + i.id + "</td><td>" + i.requested_at + "</td><td>" + i.document + "</td><td>" + (roleLabels[i.requestor] || i.requestor) + "</td><td>" + (statusLabels[i.status] || i.status) + "</td></tr>";
+        }).join("");
+      }
+
+      // ── Approval Overlay ──
+      var approvalTypeLabels = { DOC_FINALIZATION_APPROVAL: 'Фіналізація документа', RATE_OUTLIER_APPROVAL: 'Відхилення ставки' };
+      var decisionStatusLabels = { pending: 'В очікуванні', approved: 'Затверджено', rejected: 'Відхилено' };
+      var verificationLabels = { standard: 'Стандартна', deep: 'Поглиблена' };
+      var ao = window.MockRender.getMock("mock-approval-overlay");
+      var aoTbody = document.getElementById("approval-overlay-tbody");
+      if (aoTbody && ao.data && ao.data.approvals) {
+        aoTbody.innerHTML = ao.data.approvals.map(function(a) {
+          return "<tr><td>" + a.scenario + "</td><td>" + (approvalTypeLabels[a.approval_type] || a.approval_type) + "</td><td>" + (roleLabels[a.approver_role] || a.approver_role) + "</td><td>" + (decisionStatusLabels[a.decision_status] || a.decision_status) + "</td><td>" + (verificationLabels[a.verification_mode] || a.verification_mode) + "</td></tr>";
+        }).join("");
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CR-02 Часткове прибуття — UIUX PoC</title>
+  <link rel="stylesheet" href="../../../assets/css/styles.css">
+</head>
+<body>
+  <header class="page-header" role="banner">
+    <h1>CR-02 Часткове прибуття</h1>
+    <p style="margin:0; color: var(--text-secondary); font-size: 13px;">Повідомлення про прибуття з неповним обсягом вантажу</p>
+  </header>
+
+  <main class="page-main" role="main">
+    <section class="hero-notice" aria-label="Головний контекст сторінки">
+      <p class="notice-title">hero-notice: Часткове прибуття</p>
+      <p><strong>Для складу, експедитора, логіста.</strong> Сценарій, коли прибуває лише частина вантажу. Система розділяє прибуле і очікуване.</p>
+      <p><strong>Раніше (AS-IS):</strong> при частковому прибутті складський працівник повідомляв менеджера листом або дзвінком. Часто кейс закривали, не дочекавшись решти вантажу. Відстеження «що приїхало, а що ні» — в записках або Excel.</p>
+      <p><strong>Тепер у F1 (TO-BE):</strong> система розділяє прибуле vs очікуване з окремими подіями хронології для часткових прибуттів. Фінальне закриття заборонене до повної комплектації. Кожна зміна статусу часткового прибуття видима всім ролям.</p>
+    </section>
+
+    <section class="section" aria-labelledby="split-title">
+      <h2 id="split-title">Прибуле vs Очікуване</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Розділений стан</p>
+        <p>Частина вантажу вже прибула, частина — очікується.</p>
+      </div>
+      <script type="application/json" id="mock-split">
+        {
+          "meta": { "source": "dummy", "version": "poc", "contract_id": "CR-02_partial_arrival_flow" },
+          "data": {
+            "arrived": [
+              { "shipment_id": "SHP-001", "weight_kg": 450, "arrived_at": "2024-02-09T10:00:00Z", "status": "arrived" }
+            ],
+            "pending": [
+              { "shipment_id": "SHP-002", "expected_weight_kg": 350, "eta": "2024-02-12", "status": "pending" }
+            ],
+            "exception_status": "open",
+            "case_closure_blocked": true
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="card" id="split-card"></div>
+      <div class="table-wrapper" style="margin-top: 1rem;">
+        <table>
+          <thead>
+            <tr><th>Відправлення</th><th>Вага (кг)</th><th>Дата</th><th>Статус</th></tr>
+          </thead>
+          <tbody id="split-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="partial-timeline-title">
+      <h2 id="partial-timeline-title">Хронологія часткового прибуття</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Хронологія часткового прибуття</p>
+        <p>Події, пов'язані з частковим прибуттям.</p>
+      </div>
+      <script type="application/json" id="mock-partial-timeline">
+        {
+          "meta": { "source": "dummy", "version": "poc" },
+          "data": {
+            "items": [
+              { "actor": "air_logistics", "timestamp": "2024-02-09T09:00:00Z", "event": "partial_arrival_registered", "delta": "450/800 kg arrived" },
+              { "actor": "broker", "timestamp": "2024-02-09T10:30:00Z", "event": "road_logistics_notified", "delta": "Plan export for SHP-001" },
+              { "actor": "sales", "timestamp": "2024-02-09T11:00:00Z", "event": "client_updated", "delta": "Auto-notification sent" }
+            ]
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Виконавець</th><th>Час</th><th>Подія</th><th>Зміна</th></tr>
+          </thead>
+          <tbody id="partial-timeline-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <nav style="margin-top: 2rem;">
+      <a href="../../../index.html" class="btn btn-secondary">← До індексу</a>
+    </nav>
+  </main>
+
+  <script src="../../../assets/js/mock-render.js"></script>
+  <script>
+    (function() {
+      // ── UA label maps ──
+      var statusLabels = { open: 'Відкрито', investigating: 'Розслідування', resolved: 'Вирішено', closed: 'Закрито', arrived: 'Прибуло', pending: 'В очікуванні', done: 'Виконано' };
+      var exceptionLabels = { open: 'Відкрито', investigating: 'Розслідування', resolved: 'Вирішено', closed: 'Закрито' };
+      var roleLabels = { air_logistics: 'Авіалогістика', broker: 'Брокер', sales: 'Продажі', road_logistics: 'Автологістика', warehouse: 'Склад', system: 'Система' };
+
+      var split = window.MockRender.getMock("mock-split");
+      var card = document.getElementById("split-card");
+      if (card && split.data) {
+        var d = split.data;
+        card.innerHTML = "<p><strong>Стан винятку:</strong> " + (exceptionLabels[d.exception_status] || d.exception_status) + "</p>" +
+          "<p><strong>Закриття кейсу заблоковано:</strong> " + (d.case_closure_blocked ? "так" : "ні") + "</p>" +
+          "<p><strong>Прибуло:</strong> " + (d.arrived || []).length + " відправлення | <strong>Очікується:</strong> " + (d.pending || []).length + "</p>";
+      }
+
+      var rows = [];
+      if (split.data && split.data.arrived) {
+        split.data.arrived.forEach(function(s) {
+          rows.push([s.shipment_id, s.weight_kg, s.arrived_at, statusLabels[s.status] || s.status]);
+        });
+      }
+      if (split.data && split.data.pending) {
+        split.data.pending.forEach(function(s) {
+          rows.push([s.shipment_id, s.expected_weight_kg + " (оч.)", s.eta, statusLabels[s.status] || s.status]);
+        });
+      }
+      var tbody = document.getElementById("split-tbody");
+      if (tbody) {
+        tbody.innerHTML = rows.map(function(r) {
+          return "<tr><td>" + r[0] + "</td><td>" + r[1] + "</td><td>" + r[2] + "</td><td>" + r[3] + "</td></tr>";
+        }).join("");
+      }
+
+      var tl = window.MockRender.getMock("mock-partial-timeline");
+      var ptTbody = document.getElementById("partial-timeline-tbody");
+      if (ptTbody && tl.data && tl.data.items) {
+        ptTbody.innerHTML = tl.data.items.map(function(i) {
+          return "<tr><td>" + (roleLabels[i.actor] || i.actor) + "</td><td>" + i.timestamp + "</td><td>" + i.event + "</td><td>" + i.delta + "</td></tr>";
+        }).join("");
+      }
+    })();
+  </script>
+</body>
+</html>

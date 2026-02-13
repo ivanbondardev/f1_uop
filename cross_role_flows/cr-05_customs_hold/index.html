@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CR-05 Митне утримання — UIUX PoC</title>
+  <link rel="stylesheet" href="../../../assets/css/styles.css">
+</head>
+<body>
+  <header class="page-header" role="banner">
+    <h1>CR-05 Митне утримання</h1>
+    <p style="margin:0; color: var(--text-secondary); font-size: 13px;">Митниця переводить кейс у стан огляду/утримання</p>
+  </header>
+
+  <main class="page-main" role="main">
+    <section class="banner-high-severity" aria-live="polite" role="alert">
+      <strong>Митне утримання — Високий рівень</strong> Кризовий SLA активовано. Таймер утримання відображено нижче.
+    </section>
+
+    <section class="hero-notice" aria-label="Головний контекст сторінки">
+      <p class="notice-title">hero-notice: Митне утримання</p>
+      <p><strong>Для брокера, логіста, менеджера.</strong> Сценарій, коли митниця затримує вантаж для огляду або утримання. Потрібна швидка реакція для мінімізації затримки.</p>
+      <p><strong>Раніше (AS-IS):</strong> про митне утримання дізнавались від брокера по телефону або email. Час утримання не трекався. Необхідні документи для огляду збирали ad-hoc. Ескалація — лише коли клієнт починав скаржитись.</p>
+      <p><strong>Тепер у F1 (TO-BE):</strong> швидка ескалація з одного кліку. Таймер утримання показує час утримання в реальному часі. Обов'язковий чекліст підтверджень — перелік документів, необхідних для зняття утримання. Кожна дія (подача підтвердження, ескалація) фіксується в timeline з actor/time. Закриття вимагає EXCEPTION_CLOSURE_APPROVAL (TC-BR-02).</p>
+    </section>
+
+    <section class="section" aria-labelledby="hold-timer-title">
+      <h2 id="hold-timer-title">Таймер утримання</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Таймер утримання</p>
+        <p>Відстеження часу утримання до повного зняття.</p>
+      </div>
+      <script type="application/json" id="mock-hold">
+        {
+          "meta": { "source": "dummy", "version": "poc", "contract_id": "CR-05_customs_hold_flow" },
+          "data": {
+            "hold_started_at": "2024-02-10T08:00:00Z",
+            "elapsed_hours": 6,
+            "crisis_sla_hours": 24,
+            "remaining_hours": 18,
+            "exception_status": "open"
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="card" id="hold-card"></div>
+    </section>
+
+    <section class="section" aria-labelledby="escalation-title">
+      <h2 id="escalation-title">Швидка ескалація</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Ескалація</p>
+        <p>Швидка ескалація при митному утриманні.</p>
+      </div>
+      <button type="button" class="btn btn-primary" aria-label="Ескалувати митне утримання">Ескалувати зараз</button>
+    </section>
+
+    <section class="section" aria-labelledby="evidence-title">
+      <h2 id="evidence-title">Обов'язковий чекліст підтверджень</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Чекліст підтверджень</p>
+        <p>Чекліст документів для зняття утримання митницею.</p>
+      </div>
+      <script type="application/json" id="mock-evidence">
+        {
+          "meta": { "source": "dummy", "version": "poc" },
+          "data": {
+            "items": [
+              { "id": "E1", "label": "Додатковий invoice (митниця)", "status": "pending" },
+              { "id": "E2", "label": "Підтвердження вартості", "status": "done" },
+              { "id": "E3", "label": "Сертифікат походження", "status": "pending" }
+            ]
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Пункт</th><th>Статус</th></tr>
+          </thead>
+          <tbody id="evidence-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="hold-timeline-title">
+      <h2 id="hold-timeline-title">Хронологія митного утримання</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Хронологія</p>
+        <p>Події потоку митного утримання.</p>
+      </div>
+      <script type="application/json" id="mock-hold-timeline">
+        {
+          "meta": { "source": "dummy", "version": "poc" },
+          "data": {
+            "items": [
+              { "actor": "broker_user", "timestamp": "2024-02-10T08:00:00Z", "event": "customs_hold_registered", "delta": "Inspection requested" },
+              { "actor": "system", "timestamp": "2024-02-10T08:05:00Z", "event": "crisis_sla_started", "delta": "24h deadline" },
+              { "actor": "system", "timestamp": "2024-02-10T08:10:00Z", "event": "client_comm_task_created", "delta": "Sales notified" }
+            ]
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Виконавець</th><th>Час</th><th>Подія</th><th>Зміна</th></tr>
+          </thead>
+          <tbody id="hold-timeline-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="approval-overlay-title">
+      <h2 id="approval-overlay-title">Шлюз затвердження</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: EXCEPTION_CLOSURE_APPROVAL</p>
+        <p>При знятті утримання митницею закриття проходить через EXCEPTION_CLOSURE_APPROVAL (OPS_LEAD). Після затвердження виняток переходить у closed.</p>
+      </div>
+      <script type="application/json" id="mock-approval-overlay">
+        {
+          "meta": { "source": "dummy", "version": "poc" },
+          "data": {
+            "approvals": [
+              { "action": "Закриття критичного винятку", "approval_type": "EXCEPTION_CLOSURE_APPROVAL", "approver_role": "OPS_LEAD", "decision_status": "pending", "verification_mode": "standard", "sla_minutes": 30 }
+            ]
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Дія</th><th>Тип рішення</th><th>Роль-затверджувач</th><th>Статус рішення</th><th>Верифікація</th><th>SLA</th></tr>
+          </thead>
+          <tbody id="approval-overlay-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <nav style="margin-top: 2rem;">
+      <a href="../../../index.html" class="btn btn-secondary">← До індексу</a>
+    </nav>
+  </main>
+
+  <script src="../../../assets/js/mock-render.js"></script>
+  <script>
+    (function() {
+      // ── UA label maps ──
+      var statusLabels = { done: 'Виконано', pending: 'В очікуванні', open: 'Відкрито', in_progress: 'У роботі' };
+      var exceptionLabels = { open: 'Відкрито', investigating: 'Розслідування', resolved: 'Вирішено', closed: 'Закрито' };
+      var roleLabels = { broker_user: 'Брокер', system: 'Система', sales: 'Продажі' };
+
+      var hold = window.MockRender.getMock("mock-hold");
+      var card = document.getElementById("hold-card");
+      if (card && hold.data) {
+        var d = hold.data;
+        card.innerHTML = "<p><strong>Початок утримання:</strong> " + d.hold_started_at + "</p>" +
+          "<p><strong>Минуло:</strong> " + d.elapsed_hours + " год | <strong>Залишилось (SLA):</strong> " + d.remaining_hours + " год</p>" +
+          "<p><strong>Кризовий SLA:</strong> " + d.crisis_sla_hours + " год</p>" +
+          "<p><strong>Стан винятку:</strong> " + (exceptionLabels[d.exception_status] || d.exception_status) + "</p>";
+      }
+
+      var ev = window.MockRender.getMock("mock-evidence");
+      var evTbody = document.getElementById("evidence-tbody");
+      if (evTbody && ev.data && ev.data.items) {
+        evTbody.innerHTML = ev.data.items.map(function(i) {
+          var badgeClass = i.status === "done" ? "sla-badge on-track" : "sla-badge at-risk";
+          return "<tr><td>" + i.id + "</td><td>" + i.label + "</td><td><span class=\"" + badgeClass + "\">" + (statusLabels[i.status] || i.status) + "</span></td></tr>";
+        }).join("");
+      }
+
+      var tl = window.MockRender.getMock("mock-hold-timeline");
+      var htTbody = document.getElementById("hold-timeline-tbody");
+      if (htTbody && tl.data && tl.data.items) {
+        htTbody.innerHTML = tl.data.items.map(function(i) {
+          return "<tr><td>" + (roleLabels[i.actor] || i.actor) + "</td><td>" + i.timestamp + "</td><td>" + i.event + "</td><td>" + i.delta + "</td></tr>";
+        }).join("");
+      }
+
+      // ── Approval Overlay ──
+      var approvalTypeLabels = { EXCEPTION_CLOSURE_APPROVAL: 'Закриття винятку' };
+      var decisionStatusLabels = { pending: 'В очікуванні', approved: 'Затверджено', rejected: 'Відхилено' };
+      var verificationLabels = { standard: 'Стандартна', deep: 'Поглиблена' };
+      var ao = window.MockRender.getMock("mock-approval-overlay");
+      var aoTbody = document.getElementById("approval-overlay-tbody");
+      if (aoTbody && ao.data && ao.data.approvals) {
+        aoTbody.innerHTML = ao.data.approvals.map(function(a) {
+          return "<tr><td>" + a.action + "</td><td>" + (approvalTypeLabels[a.approval_type] || a.approval_type) + "</td><td>" + a.approver_role + "</td><td>" + (decisionStatusLabels[a.decision_status] || a.decision_status) + "</td><td>" + (verificationLabels[a.verification_mode] || a.verification_mode) + "</td><td>" + a.sla_minutes + " хв</td></tr>";
+        }).join("");
+      }
+    })();
+  </script>
+</body>
+</html>

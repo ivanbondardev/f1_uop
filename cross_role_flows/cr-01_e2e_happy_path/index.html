@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CR-01 Наскрізний сценарій — UIUX PoC</title>
+  <link rel="stylesheet" href="../../../assets/css/styles.css">
+</head>
+<body>
+  <header class="page-header" role="banner">
+    <h1>CR-01 Наскрізний сценарій F1</h1>
+    <p style="margin:0; color: var(--text-secondary); font-size: 13px;">Стандартний кейс без винятків</p>
+  </header>
+
+  <main class="page-main" role="main">
+    <section class="hero-notice" aria-label="Головний контекст сторінки">
+      <p class="notice-title">hero-notice: Наскрізний сценарій</p>
+      <p><strong>Для всіх ролей.</strong> Цей сценарій демонструє повний прохід кейсу від Sales до Warehouse без винятків. Кожна роль бачить свій крок і передачу наступній.</p>
+      <p><strong>Раніше (AS-IS):</strong> повний цикл кейсу координувався через email-ланцюги між 5-8 людьми. Передача між ролями не фіксувалась, SLA не контролювався. При затримці на будь-якому етапі — лише ручне з'ясування.</p>
+      <p><strong>Тепер у F1 (TO-BE):</strong> кожен крок — це системна задача з SLA. Передача між ролями — видимий процес із підтвердженням прийому. Платіжний шлюз блокує видачу до PASS. Закриття можливе лише при виконанні всіх умов закриття. Весь шлях — в єдиній хронології кейсу.</p>
+    </section>
+
+    <section class="section" aria-labelledby="flow-steps-title">
+      <h2 id="flow-steps-title">Послідовність кроків</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Кроки потоку</p>
+        <p>10 кроків від Sales до Warehouse. Кожен крок має власника, SLA, блокери.</p>
+      </div>
+      <script type="application/json" id="mock-flow-steps">
+        {
+          "meta": { "source": "dummy", "version": "poc", "contract_id": "CR-01_e2e_happy_path_f1" },
+          "data": {
+            "steps": [
+              { "order": 1, "role": "Sales", "action": "Створює кейс і завантажує базові документи", "status": "done", "sla": "on_track" },
+              { "order": 2, "role": "Air Logistics", "action": "Підтверджує booking і AWB", "status": "done", "sla": "on_track" },
+              { "order": 3, "role": "Air Logistics", "action": "Відправляє pre-alert", "status": "done", "sla": "on_track" },
+              { "order": 4, "role": "Broker", "action": "Готує T1 пакет, фіксує LRN/MRN", "status": "done", "sla": "on_track" },
+              { "order": 5, "role": "Road Logistics", "action": "Планує авто і веде кордон", "status": "done", "sla": "on_track" },
+              { "order": 6, "role": "Broker", "action": "Завершує митне оформлення", "status": "done", "sla": "on_track" },
+              { "order": 7, "role": "Accounting", "action": "Формує довідку витрат і рахунки", "status": "done", "sla": "on_track" },
+              { "order": 8, "role": "Finance", "action": "Розносить оплату і встановлює gate=PASS", "status": "done", "sla": "on_track" },
+              { "order": 9, "role": "Warehouse", "action": "Виконує release/dispatch", "status": "in_progress", "sla": "on_track" },
+              { "order": 10, "role": "System", "action": "Case отримує фінальний операційний статус", "status": "open", "sla": "on_track" }
+            ]
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Роль</th>
+              <th>Дія</th>
+              <th>Статус</th>
+              <th>SLA</th>
+            </tr>
+          </thead>
+          <tbody id="flow-steps-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="case-summary-title">
+      <h2 id="case-summary-title">Підсумок кейсу</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Підсумок кейсу</p>
+        <p>Поточний стан кейсу, шлюз, блокери.</p>
+      </div>
+      <script type="application/json" id="mock-case-summary">
+        {
+          "meta": { "source": "dummy", "version": "poc" },
+          "data": {
+            "case_id": "F1-2024-001234",
+            "current_stage": "warehouse_release",
+            "current_state": "WAREHOUSE_RECEIVING",
+            "case_status": "open",
+            "payment_gate": "pass",
+            "blockers": [],
+            "allowed_transitions": ["complete_release", "log_issue"]
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="card" id="case-summary-card"></div>
+    </section>
+
+    <section class="section" aria-labelledby="timeline-title">
+      <h2 id="timeline-title">Хронологія (останні події)</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Хронологія</p>
+        <p>Історія передач між ролями, переходи статусів.</p>
+      </div>
+      <script type="application/json" id="mock-timeline">
+        {
+          "meta": { "source": "dummy", "version": "poc" },
+          "data": {
+            "items": [
+              { "actor": "op_admin", "timestamp": "2024-02-10T14:30:00Z", "event": "gate_evaluated", "delta": "gate=PASS" },
+              { "actor": "finance_user", "timestamp": "2024-02-10T14:15:00Z", "event": "payment_allocated", "delta": "100% paid" },
+              { "actor": "broker_user", "timestamp": "2024-02-10T10:00:00Z", "event": "customs_cleared", "delta": "MRN confirmed" }
+            ]
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Виконавець</th>
+              <th>Час</th>
+              <th>Подія</th>
+              <th>Зміна</th>
+            </tr>
+          </thead>
+          <tbody id="timeline-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="approval-overlay-title">
+      <h2 id="approval-overlay-title">Шлюз затвердження</h2>
+
+      <div class="hero-notice">
+        <p class="notice-title">hero-notice: Шлях затвердження для HIGH/CRITICAL рішень</p>
+        <p>HIGH/CRITICAL рішення проходять через inbox рішень, а не прямий CTA. У щасливому шляху це стосується кроку 9 (видача/dispatch).</p>
+      </div>
+      <script type="application/json" id="mock-approval-overlay">
+        {
+          "meta": { "source": "dummy", "version": "poc" },
+          "data": {
+            "approvals": [
+              { "step": 9, "approval_type": "RELEASE_AUTHORIZATION_APPROVAL", "approver_role": "WAREHOUSE_LEAD", "decision_status": "pending", "verification_mode": "standard" }
+            ]
+          },
+          "errors": []
+        }
+      </script>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Крок</th><th>Тип рішення</th><th>Роль-затверджувач</th><th>Статус рішення</th><th>Верифікація</th></tr>
+          </thead>
+          <tbody id="approval-overlay-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <nav style="margin-top: 2rem;">
+      <a href="../../../index.html" class="btn btn-secondary">← До індексу</a>
+    </nav>
+  </main>
+
+  <script src="../../../assets/js/mock-render.js"></script>
+  <script>
+    (function() {
+      // ── UA label maps ──
+      var statusLabels = { done: 'Виконано', in_progress: 'У роботі', open: 'Відкрито', pending: 'В очікуванні', cancelled: 'Скасовано' };
+      var slaLabels = { on_track: 'В нормі', at_risk: 'Під ризиком', breached: 'Порушено' };
+      var roleLabels = { Sales: 'Продажі', 'Air Logistics': 'Авіалогістика', Broker: 'Брокер', 'Road Logistics': 'Автологістика', Warehouse: 'Склад', Accounting: 'Бухгалтерія', Finance: 'Фінанси', System: 'Система', WAREHOUSE_LEAD: 'Керівник складу', FINANCE_LEAD: 'Керівник фінансів', BROKER: 'Брокер', BROKER_LEAD: 'Керівник брокерів', ACCOUNTING: 'Бухгалтерія', FINANCE: 'Фінанси', ROAD_LOGISTICS: 'Автологістика', ROAD_LOGISTICS_LEAD: 'Керівник автологістики', SALES_LEAD: 'Керівник продажів', OPS_LEAD: 'Керівник операцій' };
+      var stateLabels = { WAREHOUSE_RECEIVING: 'Приймання на складі', BROKER_REVIEW_PENDING: 'Очікує перевірки брокера', CUSTOMS_CHECK: 'Митна перевірка', BORDER_CROSSING: 'Перетин кордону', RELEASE_BLOCKED: 'Видачу заблоковано', GATE_EVALUATION_PENDING: 'Очікує оцінки шлюзу', BOOKING_IN_PROGRESS: 'Букінг у процесі', COMPLETED: 'Завершено' };
+      var caseStatusLabels = { open: 'Відкрито', blocked: 'Заблоковано', done: 'Виконано', archived: 'Архівовано' };
+      var gateLabels = { pass: 'ДОЗВІЛ', fail: 'БЛОКУВАННЯ' };
+      var stageLabels = { warehouse_release: 'Видача зі складу' };
+
+      var steps = window.MockRender.getMock("mock-flow-steps");
+      var tbody = document.getElementById("flow-steps-tbody");
+      if (tbody && steps.data && steps.data.steps) {
+        tbody.innerHTML = steps.data.steps.map(function(s) {
+          var slaClass = s.sla === "on_track" ? "on-track" : s.sla === "at_risk" ? "at-risk" : "breached";
+          return "<tr><td>" + s.order + "</td><td>" + (roleLabels[s.role] || s.role) + "</td><td>" + s.action + "</td><td>" + (statusLabels[s.status] || s.status) + "</td><td><span class=\"sla-badge " + slaClass + "\">" + (slaLabels[s.sla] || s.sla) + "</span></td></tr>";
+        }).join("");
+      }
+
+      var summary = window.MockRender.getMock("mock-case-summary");
+      var card = document.getElementById("case-summary-card");
+      if (card && summary.data) {
+        var d = summary.data;
+        var gateClass = d.payment_gate === "pass" ? "pass" : "fail";
+        card.innerHTML = "<p><strong>ID кейсу:</strong> " + d.case_id + "</p>" +
+          "<p><strong>Етап:</strong> " + (stageLabels[d.current_stage] || d.current_stage) + " | <strong>Стан:</strong> " + (stateLabels[d.current_state] || d.current_state) + " | <strong>Статус кейсу:</strong> " + (caseStatusLabels[d.case_status] || d.case_status) + "</p>" +
+          "<p><strong>Платіжний шлюз:</strong> <span class=\"gate-badge " + gateClass + "\">" + (gateLabels[d.payment_gate] || d.payment_gate) + "</span></p>" +
+          "<p><strong>Блокери:</strong> " + (d.blockers.length ? d.blockers.join(", ") : "немає") + "</p>" +
+          "<p><strong>Доступні переходи:</strong> " + (d.allowed_transitions || []).join(", ") + "</p>";
+      }
+
+      var timeline = window.MockRender.getMock("mock-timeline");
+      var tlineTbody = document.getElementById("timeline-tbody");
+      if (tlineTbody && timeline.data && timeline.data.items) {
+        tlineTbody.innerHTML = timeline.data.items.map(function(i) {
+          return "<tr><td>" + (roleLabels[i.actor] || i.actor) + "</td><td>" + i.timestamp + "</td><td>" + i.event + "</td><td>" + i.delta + "</td></tr>";
+        }).join("");
+      }
+
+      // ── Approval Overlay ──
+      var approvalTypeLabels = { RELEASE_AUTHORIZATION_APPROVAL: 'Авторизація видачі', PAYMENT_GATE_OVERRIDE_APPROVAL: 'Override платіжного шлюзу', EXCEPTION_CLOSURE_APPROVAL: 'Закриття винятку', DOC_FINALIZATION_APPROVAL: 'Фіналізація документа', RATE_OUTLIER_APPROVAL: 'Відхилення ставки', INVOICE_CAPTURE_APPROVAL: 'Затвердження інвойсу', MEDICAL_COMPLIANCE_APPROVAL: 'Медична відповідність' };
+      var decisionStatusLabels = { pending: 'В очікуванні', approved: 'Затверджено', rejected: 'Відхилено', cancelled: 'Скасовано' };
+      var verificationLabels = { standard: 'Стандартна', deep: 'Поглиблена', spot_check: 'Вибіркова' };
+      var ao = window.MockRender.getMock("mock-approval-overlay");
+      var aoTbody = document.getElementById("approval-overlay-tbody");
+      if (aoTbody && ao.data && ao.data.approvals) {
+        aoTbody.innerHTML = ao.data.approvals.map(function(a) {
+          return "<tr><td>" + a.step + "</td><td>" + (approvalTypeLabels[a.approval_type] || a.approval_type) + "</td><td>" + (roleLabels[a.approver_role] || a.approver_role) + "</td><td>" + (decisionStatusLabels[a.decision_status] || a.decision_status) + "</td><td>" + (verificationLabels[a.verification_mode] || a.verification_mode) + "</td></tr>";
+        }).join("");
+      }
+    })();
+  </script>
+</body>
+</html>
